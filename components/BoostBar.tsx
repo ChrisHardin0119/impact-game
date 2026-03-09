@@ -33,19 +33,19 @@ export default function BoostBar({ state, onActivateBoost }: Props) {
             disabled={!canUse}
           >
             <div className="flex flex-col items-center gap-0.5">
-              <span className="text-base">{boost.emoji}</span>
-              <span className="font-bold text-sm leading-tight">{boost.name}</span>
+              <span className="text-sm">{boost.emoji}</span>
+              <span className="font-bold text-xs leading-tight">{boost.name}</span>
               {active && timeLeft > 0 && (
-                <span className="text-sm text-purple">{fmtTime(timeLeft)}</span>
+                <span className="text-xs text-purple">{fmtTime(timeLeft)}</span>
               )}
               {active && boost.id === 'prestigeDouble' && (
-                <span className="text-sm text-purple">Queued</span>
+                <span className="text-xs text-purple">Queued</span>
               )}
               {cooldown > 0 && (
-                <span className="text-sm text-red">{fmtTime(cooldown)}</span>
+                <span className="text-xs text-red">{fmtTime(cooldown)}</span>
               )}
               {!active && cooldown <= 0 && (
-                <span className="text-sm text-gray-500">{label}</span>
+                <span className="text-xs text-gray-500">{label}</span>
               )}
             </div>
           </button>

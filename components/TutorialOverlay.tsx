@@ -36,21 +36,21 @@ export default function TutorialOverlay({ currentStep, onNext, onSkip }: Props) 
           <div className="flex items-start gap-3">
             <span className="text-2xl shrink-0">{step.emoji}</span>
             <div className="flex-1 min-w-0">
-              <h3 className="glow-cyan font-bold text-base">{step.title}</h3>
-              <p className="text-sm text-gray-300 mt-1 leading-relaxed">{step.message}</p>
+              <h3 className="glow-cyan font-bold text-sm">{step.title}</h3>
+              <p className="text-xs text-gray-300 mt-1 leading-relaxed">{step.message}</p>
             </div>
           </div>
 
           {/* Buttons */}
           <div className="flex items-center justify-between mt-4">
             <button
-              className="text-sm text-gray-500 hover:text-gray-300 transition-colors"
+              className="text-xs text-gray-500 hover:text-gray-300 transition-colors"
               onClick={onSkip}
             >
               Skip Tutorial
             </button>
             <button
-              className="btn-primary text-sm"
+              className="btn-primary text-xs"
               onClick={onNext}
             >
               {isLast ? 'Start Playing!' : 'Next'}
@@ -58,7 +58,7 @@ export default function TutorialOverlay({ currentStep, onNext, onSkip }: Props) 
           </div>
 
           {/* Step counter */}
-          <div className="text-center text-sm text-gray-500 mt-2">
+          <div className="text-center text-xs text-gray-500 mt-2">
             {currentStep + 1} / {WALKTHROUGH_STEPS.length}
           </div>
         </div>

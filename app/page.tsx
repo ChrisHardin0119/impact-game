@@ -43,12 +43,9 @@ export default function GamePage() {
     setStateRaw(s);
   }, []);
 
-  // Detect mobile device and apply scaling class
+  // Ensure text size adjust on mobile
   useEffect(() => {
-    const isMobile = 'ontouchstart' in window || navigator.maxTouchPoints > 0 || window.innerWidth < 640;
-    if (isMobile) {
-      document.body.classList.add('mobile-device');
-    }
+    document.documentElement.style.setProperty('-webkit-text-size-adjust', '100%');
   }, []);
 
   // Load save on mount
@@ -319,46 +316,46 @@ export default function GamePage() {
   const unlockedOM = getUnlockedOM(state.currentTier);
 
   return (
-    <div className="scanlines flex flex-col h-screen max-h-screen no-select safe-top text-base">
+    <div className="scanlines flex flex-col h-screen max-h-screen no-select safe-top">
       {/* Resource Header */}
       <div className="bg-space-light border-b border-gray-700 px-3 sm:px-4 py-2 safe-x">
         <div className="flex items-center justify-between mb-1.5">
           <div className="flex items-center gap-2 sm:gap-4 min-w-0">
-            <span className="glow-cyan font-bold text-lg sm:text-xl truncate">{currentTierDef.emoji} {currentTierDef.name}</span>
-            {state.composition && <span className="text-base text-gray-400 truncate">| {COMPOSITIONS.find(c => c.id === state.composition)?.name}</span>}
+            <span className="glow-cyan font-bold text-base sm:text-xl truncate">{currentTierDef.emoji} {currentTierDef.name}</span>
+            {state.composition && <span className="text-sm text-gray-400 truncate">| {COMPOSITIONS.find(c => c.id === state.composition)?.name}</span>}
           </div>
           <div className="flex gap-2 shrink-0 items-center">
-            <button className="btn-secondary text-base px-3 py-1.5" onClick={() => saveGame(state)}>Save</button>
-            <button className="btn-secondary text-base px-3 py-1.5" onClick={() => setTab('stats')}>⚙</button>
-            <span className="text-xs text-gray-600">v4</span>
+            <button className="btn-secondary text-sm px-2.5 py-1" onClick={() => saveGame(state)}>Save</button>
+            <button className="btn-secondary text-sm px-2.5 py-1" onClick={() => setTab('stats')}>⚙</button>
+            <span className="text-xs text-gray-600">v6</span>
           </div>
         </div>
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-x-4 gap-y-2 sm:gap-3">
           {/* Mass */}
           <div>
-            <div className="text-base text-gray-400">Mass</div>
-            <div className="glow-cyan text-lg font-bold">{fmt(state.mass)}</div>
-            {massPerSec > 0 && <div className="text-base text-green">+{fmt(massPerSec)}/s</div>}
+            <div className="text-sm text-gray-400">Mass</div>
+            <div className="glow-cyan text-base font-bold">{fmt(state.mass)}</div>
+            {massPerSec > 0 && <div className="text-sm text-green">+{fmt(massPerSec)}/s</div>}
           </div>
           {/* Gravity */}
           <div>
-            <div className="text-base text-gray-400">Gravity <span className="text-white">{fmt(state.gravity, 0)}/300</span></div>
+            <div className="text-sm text-gray-400">Gravity <span className="text-white">{fmt(state.gravity, 0)}/300</span></div>
             <div className="resource-bar mt-1">
               <div className="resource-bar-fill" style={{width: `${(state.gravity / 300) * 100}%`, background: gravMult >= 1 ? 'var(--color-green)' : 'var(--color-red)'}} />
             </div>
-            <div className="text-base font-bold mt-0.5" style={{color: gravMult >= 1 ? 'var(--color-green)' : 'var(--color-red)'}}>{gravMult.toFixed(2)}x</div>
+            <div className="text-sm font-bold mt-0.5" style={{color: gravMult >= 1 ? 'var(--color-green)' : 'var(--color-red)'}}>{gravMult.toFixed(2)}x</div>
           </div>
           {/* Density */}
           <div>
-            <div className="text-base text-gray-400">Density <span className="text-white">{state.density.toFixed(1)}%</span></div>
+            <div className="text-sm text-gray-400">Density <span className="text-white">{state.density.toFixed(1)}%</span></div>
             <div className="resource-bar mt-1">
               <div className="resource-bar-fill" style={{width: `${state.density}%`, background: densMult >= 1 ? 'var(--color-purple)' : 'var(--color-red)'}} />
             </div>
-            <div className="text-base font-bold mt-0.5" style={{color: densMult >= 1 ? 'var(--color-purple)' : 'var(--color-red)'}}>{densMult.toFixed(2)}x</div>
+            <div className="text-sm font-bold mt-0.5" style={{color: densMult >= 1 ? 'var(--color-purple)' : 'var(--color-red)'}}>{densMult.toFixed(2)}x</div>
           </div>
           {/* Energy */}
           <div>
-            <div className="text-base text-gray-400">Energy <span className="text-white">{Math.floor(state.energy)}/{state.maxEnergy}</span></div>
+            <div className="text-sm text-gray-400">Energy <span className="text-white">{Math.floor(state.energy)}/{state.maxEnergy}</span></div>
             <div className="resource-bar mt-1">
               <div className="resource-bar-fill" style={{width: `${(state.energy / state.maxEnergy) * 100}%`, background: 'var(--color-orange)'}} />
             </div>
@@ -383,13 +380,13 @@ export default function GamePage() {
         {/* Composition Picker (shown if no composition selected) */}
         {!state.composition && activeTab === 'build' && (
           <div className="mb-4">
-            <h2 className="glow-cyan text-xl mb-2">Choose Your Composition</h2>
+            <h2 className="glow-cyan text-lg mb-2">Choose Your Composition</h2>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               {unlockedComps.map(c => (
                 <button key={c.id} className="card text-left hover:border-neon transition-colors p-3" onClick={() => handleComposition(c.id)}>
-                  <div className="font-bold text-lg">{c.emoji} {c.name}</div>
-                  <div className="text-base text-gray-400 mt-1">{c.desc}</div>
-                  <div className="text-base text-purple mt-1">{c.specialName}: {c.specialDesc}</div>
+                  <div className="font-bold text-base">{c.emoji} {c.name}</div>
+                  <div className="text-sm text-gray-400 mt-1">{c.desc}</div>
+                  <div className="text-sm text-purple mt-1">{c.specialName}: {c.specialDesc}</div>
                 </button>
               ))}
             </div>
@@ -405,9 +402,9 @@ export default function GamePage() {
                 <div className="w-28 h-28 sm:w-32 sm:h-32 rounded-full bg-gradient-to-br from-gray-600 to-gray-800 border-2 border-gray-500 flex items-center justify-center text-4xl hover:scale-105 transition-transform active:scale-95" style={{boxShadow: `0 0 ${Math.min(30, Math.log10(state.mass + 1) * 3)}px var(--color-neon)`}}>
                   🪨
                 </div>
-                <div className="absolute -bottom-5 left-1/2 -translate-x-1/2 text-base text-gray-400">Click for mass</div>
+                <div className="absolute -bottom-5 left-1/2 -translate-x-1/2 text-sm text-gray-400">Click for mass</div>
                 {floatingNums.map(f => (
-                  <div key={f.id} className="float-up absolute text-neon font-bold pointer-events-none text-lg" style={{left: f.x, top: f.y}}>
+                  <div key={f.id} className="float-up absolute text-neon font-bold pointer-events-none text-base" style={{left: f.x, top: f.y}}>
                     +{fmt(f.value)}
                   </div>
                 ))}
@@ -416,9 +413,9 @@ export default function GamePage() {
 
             {/* Buy mode selector */}
             <div className="flex items-center gap-2 mb-3">
-              <span className="text-base text-gray-400">Buy:</span>
+              <span className="text-sm text-gray-400">Buy:</span>
               {([1, 5, 10, 100, 'max'] as BuyMode[]).map(m => (
-                <button key={String(m)} className={`text-base px-3 py-2 rounded min-h-[44px] ${state.buyMode === m ? 'bg-neon text-space font-bold' : 'bg-space-lighter text-gray-400 hover:text-neon'}`} onClick={() => setBuyMode(m)}>
+                <button key={String(m)} className={`text-sm px-2.5 py-1.5 rounded min-h-[36px] ${state.buyMode === m ? 'bg-neon text-space font-bold' : 'bg-space-lighter text-gray-400 hover:text-neon'}`} onClick={() => setBuyMode(m)}>
                   {m === 'max' ? 'MAX' : `x${m}`}
                 </button>
               ))}
@@ -441,15 +438,15 @@ export default function GamePage() {
                   <div key={p.id} className={`card flex items-center justify-between p-3 ${buyInfo.canAfford ? 'hover:border-neon' : 'opacity-60'}`}>
                     <div className="flex-1">
                       <div className="flex items-center gap-2">
-                        <span className="text-xl">{p.emoji}</span>
-                        <span className="font-bold text-lg">{p.name}</span>
-                        <span className="text-base text-gray-400">x{owned}</span>
-                        {p.compositionBonus === state.composition && <span className="text-base text-purple">★ bonus</span>}
+                        <span className="text-lg">{p.emoji}</span>
+                        <span className="font-bold text-base">{p.name}</span>
+                        <span className="text-sm text-gray-400">x{owned}</span>
+                        {p.compositionBonus === state.composition && <span className="text-sm text-purple">★ bonus</span>}
                       </div>
-                      <div className="text-base text-gray-400 mt-0.5">{p.desc}</div>
-                      <div className="text-base text-neon-dim mt-0.5">+{fmt(p.baseMPS)}/s mass {p.gravityPS > 0 ? `| +${p.gravityPS}/s grav` : ''} {p.densityPS > 0 ? `| +${fmtPct(p.densityPS)}/s dens` : ''}</div>
+                      <div className="text-sm text-gray-400 mt-0.5">{p.desc}</div>
+                      <div className="text-sm text-neon-dim mt-0.5">+{fmt(p.baseMPS)}/s mass {p.gravityPS > 0 ? `| +${p.gravityPS}/s grav` : ''} {p.densityPS > 0 ? `| +${fmtPct(p.densityPS)}/s dens` : ''}</div>
                     </div>
-                    <button className="btn-primary text-base ml-2" disabled={!buyInfo.canAfford} onClick={() => handleBuy(p.id)}>
+                    <button className="btn-primary text-sm ml-2" disabled={!buyInfo.canAfford} onClick={() => handleBuy(p.id)}>
                       {buyInfo.label}
                     </button>
                   </div>
@@ -462,7 +459,7 @@ export default function GamePage() {
         {/* ORBITAL TAB */}
         {activeTab === 'orbital' && (
           <div>
-            <h2 className="glow-purple text-xl mb-3">Orbital Mechanics</h2>
+            <h2 className="glow-purple text-lg mb-3">Orbital Mechanics</h2>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
               {unlockedOM.map(om => {
                 const cd = state.omCooldowns[om.id] || 0;
@@ -471,16 +468,16 @@ export default function GamePage() {
                 return (
                   <button key={om.id} className={`card text-left relative ${isActive ? 'border-purple box-glow-purple' : canUse ? 'hover:border-neon' : 'opacity-50'}`} onClick={() => handleOM(om.id)} disabled={!canUse}>
                     <div className="flex items-center gap-2">
-                      <span className="text-xl">{om.emoji}</span>
-                      <span className="font-bold text-base">{om.name}</span>
+                      <span className="text-lg">{om.emoji}</span>
+                      <span className="font-bold text-sm">{om.name}</span>
                     </div>
-                    <div className="text-base text-gray-400 mt-1">{om.desc}</div>
-                    <div className="flex justify-between mt-2 text-base">
+                    <div className="text-sm text-gray-400 mt-1">{om.desc}</div>
+                    <div className="flex justify-between mt-2 text-sm">
                       <span className="text-orange">{om.energyCost}E</span>
                       <span className="text-gray-400">{om.duration > 0 ? `${om.duration}s` : 'Instant'}</span>
                       <span className={cd > 0 ? 'text-red' : 'text-green'}>{cd > 0 ? `${cd.toFixed(1)}s` : 'Ready'}</span>
                     </div>
-                    {isActive && <div className="absolute top-1 right-2 text-base text-purple">{state.omActive[om.id]?.toFixed(1)}s</div>}
+                    {isActive && <div className="absolute top-1 right-2 text-sm text-purple">{state.omActive[om.id]?.toFixed(1)}s</div>}
                   </button>
                 );
               })}
@@ -491,11 +488,11 @@ export default function GamePage() {
         {/* UPGRADES TAB */}
         {activeTab === 'upgrades' && (
           <div>
-            <h2 className="glow-orange text-xl mb-1">Core Upgrades</h2>
-            <div className="text-base text-gray-400 mb-3">Shards: <span className="text-yellow">{fmt(state.currentShards)}</span></div>
+            <h2 className="glow-orange text-lg mb-1">Core Upgrades</h2>
+            <div className="text-sm text-gray-400 mb-3">Shards: <span className="text-yellow">{fmt(state.currentShards)}</span></div>
             {(['foundation', 'synergy', 'density', 'energy'] as const).map(path => (
               <div key={path} className="mb-4">
-                <h3 className="text-base font-bold text-gray-400 uppercase mb-2 tracking-wider">{path} Path</h3>
+                <h3 className="text-sm font-bold text-gray-400 uppercase mb-2 tracking-wider">{path} Path</h3>
                 <div className="space-y-1">
                   {CORE_UPGRADES.filter(u => u.path === path).map(u => {
                     const level = state.coreUpgrades[u.id] || 0;
@@ -505,15 +502,15 @@ export default function GamePage() {
                     return (
                       <div key={u.id} className={`card flex items-center justify-between ${maxed ? 'border-green opacity-70' : canBuy ? 'hover:border-orange' : 'opacity-40'}`}>
                         <div>
-                          <span>{u.emoji} <span className="font-bold text-lg">{u.name}</span> <span className="text-base text-gray-400">Lv.{level}/{u.maxLevel}</span></span>
-                          <div className="text-base text-gray-400">{u.desc}</div>
+                          <span>{u.emoji} <span className="font-bold text-sm">{u.name}</span> <span className="text-xs text-gray-400">Lv.{level}/{u.maxLevel}</span></span>
+                          <div className="text-sm text-gray-400">{u.desc}</div>
                         </div>
                         {!maxed && (
-                          <button className="btn-secondary text-base ml-2" disabled={!canBuy} onClick={() => handleUpgrade(u.id)}>
+                          <button className="btn-secondary text-sm ml-2" disabled={!canBuy} onClick={() => handleUpgrade(u.id)}>
                             {fmt(cost)} 💎
                           </button>
                         )}
-                        {maxed && <span className="text-base text-green">MAX</span>}
+                        {maxed && <span className="text-sm text-green">MAX</span>}
                       </div>
                     );
                   })}
@@ -526,15 +523,15 @@ export default function GamePage() {
         {/* PRESTIGE TAB */}
         {activeTab === 'prestige' && (
           <div>
-            <h2 className="glow-cyan text-xl mb-3">Prestige</h2>
+            <h2 className="glow-cyan text-lg mb-3">Prestige</h2>
             <div className="card mb-4">
-              <div className="text-base">Current Tier: <span className="glow-cyan font-bold">{currentTierDef.emoji} {currentTierDef.name}</span></div>
-              <div className="text-base mt-1">Lifetime Shards: <span className="text-yellow">{fmt(state.lifetimeShards)}</span></div>
-              <div className="text-base mt-1">Available Shards: <span className="text-yellow">{fmt(state.currentShards)}</span></div>
-              <div className="text-base mt-1">Total Prestiges: {state.totalPrestigeCount}</div>
+              <div className="text-sm">Current Tier: <span className="glow-cyan font-bold">{currentTierDef.emoji} {currentTierDef.name}</span></div>
+              <div className="text-sm mt-1">Lifetime Shards: <span className="text-yellow">{fmt(state.lifetimeShards)}</span></div>
+              <div className="text-sm mt-1">Available Shards: <span className="text-yellow">{fmt(state.currentShards)}</span></div>
+              <div className="text-sm mt-1">Total Prestiges: {state.totalPrestigeCount}</div>
               {nextTierDef && (
                 <div className="mt-2">
-                  <div className="text-base text-gray-400">Next: {nextTierDef.emoji} {nextTierDef.name} — {fmt(nextTierDef.shardReq)} lifetime shards</div>
+                  <div className="text-sm text-gray-400">Next: {nextTierDef.emoji} {nextTierDef.name} — {fmt(nextTierDef.shardReq)} lifetime shards</div>
                   <div className="resource-bar mt-1">
                     <div className="resource-bar-fill bg-yellow" style={{width: `${Math.min(100, (state.lifetimeShards / nextTierDef.shardReq) * 100)}%`}} />
                   </div>
@@ -542,17 +539,17 @@ export default function GamePage() {
               )}
             </div>
             <div className="card mb-4">
-              <div className="text-base">Run Mass: <span className="glow-cyan">{fmt(state.runMassEarned)}</span></div>
-              <div className="text-base mt-1">Shards on Prestige: <span className="text-yellow font-bold">{fmt(shardsOnPrestige)}</span></div>
+              <div className="text-sm">Run Mass: <span className="glow-cyan">{fmt(state.runMassEarned)}</span></div>
+              <div className="text-sm mt-1">Shards on Prestige: <span className="text-yellow font-bold">{fmt(shardsOnPrestige)}</span></div>
               <button className="btn-primary mt-3 w-full" disabled={!canPrestige(state)} onClick={handlePrestige}>
                 {canPrestige(state) ? `Prestige for ${fmt(shardsOnPrestige)} Shards` : 'Need more mass to prestige'}
               </button>
-              <div className="text-base text-gray-400 mt-2">Prestige resets mass, gravity, density, processes and orbital mechanics. Core upgrades and discoveries persist.</div>
+              <div className="text-sm text-gray-400 mt-2">Prestige resets mass, gravity, density, processes and orbital mechanics. Core upgrades and discoveries persist.</div>
             </div>
             {state.composition && (
               <div className="card">
-                <div className="text-base mb-2">Current Composition: <span className="font-bold">{COMPOSITIONS.find(c => c.id === state.composition)?.name}</span></div>
-                <div className="text-base text-gray-400">You can change composition when you prestige.</div>
+                <div className="text-sm mb-2">Current Composition: <span className="font-bold">{COMPOSITIONS.find(c => c.id === state.composition)?.name}</span></div>
+                <div className="text-sm text-gray-400">You can change composition when you prestige.</div>
               </div>
             )}
           </div>
@@ -561,18 +558,18 @@ export default function GamePage() {
         {/* DISCOVER TAB */}
         {activeTab === 'discover' && (
           <div>
-            <h2 className="glow-orange text-xl mb-3">Discoveries</h2>
-            <div className="text-base text-gray-400 mb-3">{state.discoveries.length}/{DISCOVERIES.length} discovered</div>
+            <h2 className="glow-orange text-lg mb-3">Discoveries</h2>
+            <div className="text-sm text-gray-400 mb-3">{state.discoveries.length}/{DISCOVERIES.length} discovered</div>
             <div className="space-y-2">
               {DISCOVERIES.map(d => {
                 const found = state.discoveries.includes(d.id);
                 return (
                   <div key={d.id} className={`card ${found ? 'border-orange' : 'opacity-40'}`}>
                     <div className="flex items-center gap-2">
-                      <span className="text-lg">{found ? d.emoji : '❓'}</span>
-                      <span className="font-bold text-base">{found ? d.name : '???'}</span>
+                      <span className="text-base">{found ? d.emoji : '❓'}</span>
+                      <span className="font-bold text-sm">{found ? d.name : '???'}</span>
                     </div>
-                    <div className="text-base text-gray-400 mt-1">{found ? d.bonusDesc : d.hint}</div>
+                    <div className="text-sm text-gray-400 mt-1">{found ? d.bonusDesc : d.hint}</div>
                   </div>
                 );
               })}
@@ -583,21 +580,21 @@ export default function GamePage() {
         {/* STATS TAB */}
         {activeTab === 'stats' && (
           <div>
-            <h2 className="glow-cyan text-xl mb-3">Statistics</h2>
+            <h2 className="glow-cyan text-lg mb-3">Statistics</h2>
             <div className="card space-y-1 mb-4">
-              <div className="text-base">Total Mass Earned: <span className="text-neon">{fmt(state.totalMassEarned)}</span></div>
-              <div className="text-base">Highest Mass: <span className="text-neon">{fmt(state.highestMass)}</span></div>
-              <div className="text-base">Total Clicks: <span className="text-neon">{fmt(state.totalClicks)}</span></div>
-              <div className="text-base">Total Play Time: <span className="text-neon">{fmtTime(state.totalPlayTime)}</span></div>
-              <div className="text-base">Run Time: <span className="text-neon">{fmtTime(state.runTime)}</span></div>
-              <div className="text-base">Comets Caught: <span className="text-neon">{state.cometsCaught}</span></div>
-              <div className="text-base">Prestige Count: <span className="text-neon">{state.totalPrestigeCount}</span></div>
+              <div className="text-sm">Total Mass Earned: <span className="text-neon">{fmt(state.totalMassEarned)}</span></div>
+              <div className="text-sm">Highest Mass: <span className="text-neon">{fmt(state.highestMass)}</span></div>
+              <div className="text-sm">Total Clicks: <span className="text-neon">{fmt(state.totalClicks)}</span></div>
+              <div className="text-sm">Total Play Time: <span className="text-neon">{fmtTime(state.totalPlayTime)}</span></div>
+              <div className="text-sm">Run Time: <span className="text-neon">{fmtTime(state.runTime)}</span></div>
+              <div className="text-sm">Comets Caught: <span className="text-neon">{state.cometsCaught}</span></div>
+              <div className="text-sm">Prestige Count: <span className="text-neon">{state.totalPrestigeCount}</span></div>
             </div>
-            <h3 className="text-base font-bold text-gray-400 mb-2">Settings</h3>
+            <h3 className="text-sm font-bold text-gray-400 mb-2">Settings</h3>
             <div className="space-y-2">
-              <button className="btn-secondary w-full text-base" onClick={() => { saveGame(state); addToast('Game saved!', '💾'); }}>Manual Save</button>
-              <button className="btn-secondary w-full text-base" onClick={() => { const code = exportSave(state); navigator.clipboard.writeText(code); addToast('Save exported to clipboard!', '📋'); }}>Export Save</button>
-              <button className="btn-secondary w-full text-base" onClick={() => {
+              <button className="btn-secondary w-full text-sm" onClick={() => { saveGame(state); addToast('Game saved!', '💾'); }}>Manual Save</button>
+              <button className="btn-secondary w-full text-sm" onClick={() => { const code = exportSave(state); navigator.clipboard.writeText(code); addToast('Save exported to clipboard!', '📋'); }}>Export Save</button>
+              <button className="btn-secondary w-full text-sm" onClick={() => {
                 const code = prompt('Paste save code:');
                 if (code) {
                   const imported = importSave(code);
@@ -605,7 +602,7 @@ export default function GamePage() {
                   else addToast('Invalid save code', '❌');
                 }
               }}>Import Save</button>
-              <button className="btn-danger w-full text-base" onClick={() => {
+              <button className="btn-danger w-full text-sm" onClick={() => {
                 if (confirm('Are you sure? This deletes ALL progress!')) {
                   hardReset();
                   setState(defaultGameState());
@@ -614,7 +611,7 @@ export default function GamePage() {
                 }
               }}>Hard Reset</button>
             </div>
-            <h3 className="text-base font-bold text-gray-400 mb-2 mt-4">Feedback</h3>
+            <h3 className="text-sm font-bold text-gray-400 mb-2 mt-4">Feedback</h3>
             <div className="card">
               <FeedbackForm
                 state={state}
@@ -640,9 +637,9 @@ export default function GamePage() {
       {offlineGains && (
         <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 px-4">
           <div className="card max-w-sm w-full text-center mx-4">
-            <h2 className="glow-cyan text-xl mb-2">Welcome Back!</h2>
-            <div className="text-base text-gray-400 mb-1">You were away for {fmtTime(offlineGains.time)}</div>
-            <div className="text-xl text-neon font-bold">+{fmt(offlineGains.mass)} mass</div>
+            <h2 className="glow-cyan text-lg mb-2">Welcome Back!</h2>
+            <div className="text-sm text-gray-400 mb-1">You were away for {fmtTime(offlineGains.time)}</div>
+            <div className="text-lg text-neon font-bold">+{fmt(offlineGains.mass)} mass</div>
             <button className="btn-primary mt-4" onClick={() => setOfflineGains(null)}>Continue</button>
           </div>
         </div>
