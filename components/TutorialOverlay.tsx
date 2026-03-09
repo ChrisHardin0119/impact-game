@@ -78,16 +78,16 @@ export function ContextualHint({
   onDismiss: () => void;
 }) {
   return (
-    <div className="fixed bottom-4 left-4 right-4 sm:left-auto sm:right-4 sm:w-80 z-40">
+    <div className="fixed bottom-16 left-3 right-3 sm:left-auto sm:right-4 sm:bottom-4 sm:w-80 z-40">
       <div className="bg-space-lighter border border-orange rounded-lg p-3 shadow-lg">
         <div className="flex items-start gap-2">
           <span className="text-lg shrink-0">{step.emoji}</span>
           <div className="flex-1 min-w-0">
             <h4 className="text-sm font-bold text-orange">{step.title}</h4>
-            <p className="text-xs text-gray-300 mt-1 leading-relaxed">{step.message}</p>
+            <p className="text-sm text-gray-300 mt-1 leading-relaxed">{step.message}</p>
           </div>
           <button
-            className="text-gray-500 hover:text-gray-300 text-lg shrink-0"
+            className="text-gray-400 hover:text-gray-200 text-2xl shrink-0 leading-none min-w-[32px] min-h-[32px] flex items-center justify-center"
             onClick={onDismiss}
           >
             ×

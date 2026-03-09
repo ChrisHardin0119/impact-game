@@ -300,7 +300,7 @@ export default function GamePage() {
     <div className="scanlines flex flex-col h-screen max-h-screen no-select safe-top">
       {/* Resource Header */}
       <div className="bg-space-light border-b border-gray-700 px-3 sm:px-4 py-2 safe-x">
-        <div className="flex items-center justify-between mb-1">
+        <div className="flex items-center justify-between mb-1.5">
           <div className="flex items-center gap-2 sm:gap-4 min-w-0">
             <span className="glow-cyan font-bold text-base sm:text-lg truncate">{currentTierDef.emoji} {currentTierDef.name}</span>
             {state.composition && <span className="text-sm text-gray-400 truncate">| {COMPOSITIONS.find(c => c.id === state.composition)?.name}</span>}
@@ -310,32 +310,33 @@ export default function GamePage() {
             <button className="btn-secondary text-sm px-3 py-1.5" onClick={() => setTab('stats')}>⚙</button>
           </div>
         </div>
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-3">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-x-4 gap-y-2 sm:gap-3">
           {/* Mass */}
           <div>
-            <div className="text-sm text-gray-400 flex justify-between"><span>Mass</span><span className="glow-cyan">{fmt(state.mass)}</span></div>
+            <div className="text-sm text-gray-400">Mass</div>
+            <div className="glow-cyan text-base font-bold">{fmt(state.mass)}</div>
             {massPerSec > 0 && <div className="mass-per-sec">+{fmt(massPerSec)}/s</div>}
           </div>
           {/* Gravity */}
           <div>
-            <div className="text-sm text-gray-400 flex justify-between"><span>Gravity</span><span>{fmt(state.gravity, 0)}/300</span></div>
-            <div className="resource-bar mt-0.5">
+            <div className="text-sm text-gray-400">Gravity <span className="text-white">{fmt(state.gravity, 0)}/300</span></div>
+            <div className="resource-bar mt-1">
               <div className="resource-bar-fill" style={{width: `${(state.gravity / 300) * 100}%`, background: gravMult >= 1 ? 'var(--color-green)' : 'var(--color-red)'}} />
             </div>
-            <div className="text-sm" style={{color: gravMult >= 1 ? 'var(--color-green)' : 'var(--color-red)'}}>{gravMult.toFixed(2)}x</div>
+            <div className="text-sm font-bold mt-0.5" style={{color: gravMult >= 1 ? 'var(--color-green)' : 'var(--color-red)'}}>{gravMult.toFixed(2)}x</div>
           </div>
           {/* Density */}
           <div>
-            <div className="text-sm text-gray-400 flex justify-between"><span>Density</span><span>{state.density.toFixed(1)}%</span></div>
-            <div className="resource-bar mt-0.5">
+            <div className="text-sm text-gray-400">Density <span className="text-white">{state.density.toFixed(1)}%</span></div>
+            <div className="resource-bar mt-1">
               <div className="resource-bar-fill" style={{width: `${state.density}%`, background: densMult >= 1 ? 'var(--color-purple)' : 'var(--color-red)'}} />
             </div>
-            <div className="text-sm" style={{color: densMult >= 1 ? 'var(--color-purple)' : 'var(--color-red)'}}>{densMult.toFixed(2)}x</div>
+            <div className="text-sm font-bold mt-0.5" style={{color: densMult >= 1 ? 'var(--color-purple)' : 'var(--color-red)'}}>{densMult.toFixed(2)}x</div>
           </div>
           {/* Energy */}
           <div>
-            <div className="text-sm text-gray-400 flex justify-between"><span>Energy</span><span>{Math.floor(state.energy)}/{state.maxEnergy}</span></div>
-            <div className="resource-bar mt-0.5">
+            <div className="text-sm text-gray-400">Energy <span className="text-white">{Math.floor(state.energy)}/{state.maxEnergy}</span></div>
+            <div className="resource-bar mt-1">
               <div className="resource-bar-fill" style={{width: `${(state.energy / state.maxEnergy) * 100}%`, background: 'var(--color-orange)'}} />
             </div>
           </div>
@@ -346,10 +347,10 @@ export default function GamePage() {
       <BoostBar state={state} onActivateBoost={handleActivateBoost} />
 
       {/* Tab Navigation */}
-      <div className="tab-bar border-b border-gray-700 bg-space-light px-2 safe-x">
+      <div className="tab-bar border-b border-gray-700 bg-space-light px-1 safe-x">
         {tabs.map(t => (
-          <button key={t.id} className={`tab whitespace-nowrap ${activeTab === t.id ? 'tab-active' : ''}`} onClick={() => setTab(t.id)}>
-            <span className="mr-1">{t.icon}</span>{t.label}
+          <button key={t.id} className={`tab whitespace-nowrap flex-1 justify-center ${activeTab === t.id ? 'tab-active' : ''}`} onClick={() => setTab(t.id)}>
+            <span className="sm:mr-1">{t.icon}</span><span className="hidden sm:inline">{t.label}</span>
           </button>
         ))}
       </div>
