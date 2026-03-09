@@ -182,9 +182,11 @@ body {
 
 /* Mobile responsive breakpoints */
 @media (max-width: 640px) {
-  .card { padding: 0.5rem; }
-  .btn-primary, .btn-secondary, .btn-danger { padding: 0.4rem 0.7rem; font-size: 0.8rem; }
-  .tab { padding: 0.35rem 0.5rem; font-size: 0.7rem; letter-spacing: 0; }
+  body { font-size: 16px; }
+  .card { padding: 0.6rem; }
+  .btn-primary, .btn-secondary, .btn-danger { padding: 0.5rem 0.8rem; font-size: 0.875rem; min-height: 44px; }
+  .tab { padding: 0.5rem 0.65rem; font-size: 0.8rem; letter-spacing: 0; min-height: 44px; display: flex; align-items: center; }
+  .resource-bar { height: 10px; }
 }
 
 /* Safe area insets for notched phones */
@@ -212,5 +214,5 @@ body {
 /* Mass per second indicator */
 .mass-per-sec {
   color: var(--color-green);
-  font-size: 0.7rem;
+  font-size: 0.8rem;
 }

@@ -299,42 +299,42 @@ export default function GamePage() {
   return (
     <div className="scanlines flex flex-col h-screen max-h-screen no-select safe-top">
       {/* Resource Header */}
-      <div className="bg-space-light border-b border-gray-700 px-2 sm:px-4 py-1.5 sm:py-2 safe-x">
+      <div className="bg-space-light border-b border-gray-700 px-3 sm:px-4 py-2 safe-x">
         <div className="flex items-center justify-between mb-1">
           <div className="flex items-center gap-2 sm:gap-4 min-w-0">
-            <span className="glow-cyan font-bold text-sm sm:text-lg truncate">{currentTierDef.emoji} {currentTierDef.name}</span>
-            {state.composition && <span className="text-xs sm:text-sm text-gray-400 truncate">| {COMPOSITIONS.find(c => c.id === state.composition)?.name}</span>}
+            <span className="glow-cyan font-bold text-base sm:text-lg truncate">{currentTierDef.emoji} {currentTierDef.name}</span>
+            {state.composition && <span className="text-sm text-gray-400 truncate">| {COMPOSITIONS.find(c => c.id === state.composition)?.name}</span>}
           </div>
-          <div className="flex gap-1.5 sm:gap-2 shrink-0">
-            <button className="btn-secondary text-xs px-2 py-1" onClick={() => saveGame(state)}>Save</button>
-            <button className="btn-secondary text-xs px-2 py-1" onClick={() => setTab('stats')}>⚙</button>
+          <div className="flex gap-2 shrink-0">
+            <button className="btn-secondary text-sm px-3 py-1.5" onClick={() => saveGame(state)}>Save</button>
+            <button className="btn-secondary text-sm px-3 py-1.5" onClick={() => setTab('stats')}>⚙</button>
           </div>
         </div>
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-3">
           {/* Mass */}
           <div>
-            <div className="text-xs text-gray-400 flex justify-between"><span>Mass</span><span className="glow-cyan">{fmt(state.mass)}</span></div>
+            <div className="text-sm text-gray-400 flex justify-between"><span>Mass</span><span className="glow-cyan">{fmt(state.mass)}</span></div>
             {massPerSec > 0 && <div className="mass-per-sec">+{fmt(massPerSec)}/s</div>}
           </div>
           {/* Gravity */}
           <div>
-            <div className="text-xs text-gray-400 flex justify-between"><span>Gravity</span><span>{fmt(state.gravity, 0)}/300</span></div>
+            <div className="text-sm text-gray-400 flex justify-between"><span>Gravity</span><span>{fmt(state.gravity, 0)}/300</span></div>
             <div className="resource-bar mt-0.5">
               <div className="resource-bar-fill" style={{width: `${(state.gravity / 300) * 100}%`, background: gravMult >= 1 ? 'var(--color-green)' : 'var(--color-red)'}} />
             </div>
-            <div className="text-xs" style={{color: gravMult >= 1 ? 'var(--color-green)' : 'var(--color-red)'}}>{gravMult.toFixed(2)}x</div>
+            <div className="text-sm" style={{color: gravMult >= 1 ? 'var(--color-green)' : 'var(--color-red)'}}>{gravMult.toFixed(2)}x</div>
           </div>
           {/* Density */}
           <div>
-            <div className="text-xs text-gray-400 flex justify-between"><span>Density</span><span>{state.density.toFixed(1)}%</span></div>
+            <div className="text-sm text-gray-400 flex justify-between"><span>Density</span><span>{state.density.toFixed(1)}%</span></div>
             <div className="resource-bar mt-0.5">
               <div className="resource-bar-fill" style={{width: `${state.density}%`, background: densMult >= 1 ? 'var(--color-purple)' : 'var(--color-red)'}} />
             </div>
-            <div className="text-xs" style={{color: densMult >= 1 ? 'var(--color-purple)' : 'var(--color-red)'}}>{densMult.toFixed(2)}x</div>
+            <div className="text-sm" style={{color: densMult >= 1 ? 'var(--color-purple)' : 'var(--color-red)'}}>{densMult.toFixed(2)}x</div>
           </div>
           {/* Energy */}
           <div>
-            <div className="text-xs text-gray-400 flex justify-between"><span>Energy</span><span>{Math.floor(state.energy)}/{state.maxEnergy}</span></div>
+            <div className="text-sm text-gray-400 flex justify-between"><span>Energy</span><span>{Math.floor(state.energy)}/{state.maxEnergy}</span></div>
             <div className="resource-bar mt-0.5">
               <div className="resource-bar-fill" style={{width: `${(state.energy / state.maxEnergy) * 100}%`, background: 'var(--color-orange)'}} />
             </div>
@@ -355,17 +355,17 @@ export default function GamePage() {
       </div>
 
       {/* Content Area */}
-      <div className="flex-1 overflow-y-auto px-2 sm:px-4 py-3 safe-bottom safe-x">
+      <div className="flex-1 overflow-y-auto px-3 sm:px-4 py-3 safe-bottom safe-x">
         {/* Composition Picker (shown if no composition selected) */}
         {!state.composition && activeTab === 'build' && (
           <div className="mb-4">
             <h2 className="glow-cyan text-lg mb-2">Choose Your Composition</h2>
-            <div className="grid grid-cols-2 gap-2">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               {unlockedComps.map(c => (
-                <button key={c.id} className="card text-left hover:border-neon transition-colors" onClick={() => handleComposition(c.id)}>
-                  <div className="font-bold">{c.emoji} {c.name}</div>
-                  <div className="text-xs text-gray-400 mt-1">{c.desc}</div>
-                  <div className="text-xs text-purple mt-1">{c.specialName}: {c.specialDesc}</div>
+                <button key={c.id} className="card text-left hover:border-neon transition-colors p-3" onClick={() => handleComposition(c.id)}>
+                  <div className="font-bold text-base">{c.emoji} {c.name}</div>
+                  <div className="text-sm text-gray-400 mt-1">{c.desc}</div>
+                  <div className="text-sm text-purple mt-1">{c.specialName}: {c.specialDesc}</div>
                 </button>
               ))}
             </div>
@@ -378,12 +378,12 @@ export default function GamePage() {
             {/* Click area */}
             <div className="flex justify-center mb-4">
               <div className="relative cursor-pointer select-none" onClick={handleClick}>
-                <div className="w-32 h-32 rounded-full bg-gradient-to-br from-gray-600 to-gray-800 border-2 border-gray-500 flex items-center justify-center text-4xl hover:scale-105 transition-transform active:scale-95" style={{boxShadow: `0 0 ${Math.min(30, Math.log10(state.mass + 1) * 3)}px var(--color-neon)`}}>
+                <div className="w-28 h-28 sm:w-32 sm:h-32 rounded-full bg-gradient-to-br from-gray-600 to-gray-800 border-2 border-gray-500 flex items-center justify-center text-4xl hover:scale-105 transition-transform active:scale-95" style={{boxShadow: `0 0 ${Math.min(30, Math.log10(state.mass + 1) * 3)}px var(--color-neon)`}}>
                   🪨
                 </div>
-                <div className="absolute -bottom-5 left-1/2 -translate-x-1/2 text-xs text-gray-400">Click for mass</div>
+                <div className="absolute -bottom-5 left-1/2 -translate-x-1/2 text-sm text-gray-400">Click for mass</div>
                 {floatingNums.map(f => (
-                  <div key={f.id} className="float-up absolute text-neon font-bold pointer-events-none text-sm" style={{left: f.x, top: f.y}}>
+                  <div key={f.id} className="float-up absolute text-neon font-bold pointer-events-none text-base" style={{left: f.x, top: f.y}}>
                     +{fmt(f.value)}
                   </div>
                 ))}
@@ -392,9 +392,9 @@ export default function GamePage() {
 
             {/* Buy mode selector */}
             <div className="flex items-center gap-2 mb-3">
-              <span className="text-xs text-gray-400">Buy:</span>
+              <span className="text-sm text-gray-400">Buy:</span>
               {([1, 5, 10, 100, 'max'] as BuyMode[]).map(m => (
-                <button key={String(m)} className={`text-xs px-2 py-0.5 rounded ${state.buyMode === m ? 'bg-neon text-space font-bold' : 'bg-space-lighter text-gray-400 hover:text-neon'}`} onClick={() => setBuyMode(m)}>
+                <button key={String(m)} className={`text-sm px-3 py-1.5 rounded min-h-[36px] ${state.buyMode === m ? 'bg-neon text-space font-bold' : 'bg-space-lighter text-gray-400 hover:text-neon'}`} onClick={() => setBuyMode(m)}>
                   {m === 'max' ? 'MAX' : `x${m}`}
                 </button>
               ))}
@@ -414,18 +414,18 @@ export default function GamePage() {
                 if (!unlocked && owned === 0) return null;
 
                 return (
-                  <div key={p.id} className={`card flex items-center justify-between ${canAfford ? 'hover:border-neon' : 'opacity-60'}`}>
+                  <div key={p.id} className={`card flex items-center justify-between p-3 ${canAfford ? 'hover:border-neon' : 'opacity-60'}`}>
                     <div className="flex-1">
                       <div className="flex items-center gap-2">
-                        <span>{p.emoji}</span>
-                        <span className="font-bold text-sm">{p.name}</span>
-                        <span className="text-xs text-gray-400">x{owned}</span>
-                        {p.compositionBonus === state.composition && <span className="text-xs text-purple">★ bonus</span>}
+                        <span className="text-lg">{p.emoji}</span>
+                        <span className="font-bold text-base">{p.name}</span>
+                        <span className="text-sm text-gray-400">x{owned}</span>
+                        {p.compositionBonus === state.composition && <span className="text-sm text-purple">★ bonus</span>}
                       </div>
-                      <div className="text-xs text-gray-400 mt-0.5">{p.desc}</div>
-                      <div className="text-xs text-neon-dim mt-0.5">+{fmt(p.baseMPS)}/s mass {p.gravityPS > 0 ? `| +${p.gravityPS}/s grav` : ''} {p.densityPS > 0 ? `| +${fmtPct(p.densityPS)}/s dens` : ''}</div>
+                      <div className="text-sm text-gray-400 mt-0.5">{p.desc}</div>
+                      <div className="text-sm text-neon-dim mt-0.5">+{fmt(p.baseMPS)}/s mass {p.gravityPS > 0 ? `| +${p.gravityPS}/s grav` : ''} {p.densityPS > 0 ? `| +${fmtPct(p.densityPS)}/s dens` : ''}</div>
                     </div>
-                    <button className="btn-primary text-sm ml-2" disabled={!canAfford} onClick={() => handleBuy(p.id)}>
+                    <button className="btn-primary text-base ml-2" disabled={!canAfford} onClick={() => handleBuy(p.id)}>
                       {fmt(cost)}
                     </button>
                   </div>
