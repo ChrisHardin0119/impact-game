@@ -175,13 +175,16 @@ export function getMassPerSecond(state: GameState): number {
 
 /**
  * Calculates the value of a single click.
- * Base: 1
+ * Base: 1 + 10% of mass/sec (so clicks scale with progress)
  * * composition clickMult
  * * (1 + totalClicks * 0.0001) capped at 2x
- * * 5 if meteor_barrage active
+ * * combo multiplier (1x–5x based on rapid clicking)
+ * * 5x if meteor_barrage active
  */
-export function getClickValue(state: GameState): number {
-  let value = 1;
+export function getClickValue(state: GameState, comboMultiplier: number = 1): number {
+  // Base value scales with production: 1 + 10% of mass/sec
+  const mps = getMassPerSecond(state);
+  let value = 1 + mps * 0.1;
 
   // Apply composition multiplier
   if (state.composition) {
@@ -195,6 +198,9 @@ export function getClickValue(state: GameState): number {
   const clickScaling = Math.min(1 + state.totalClicks * 0.0001, 2);
   value *= clickScaling;
 
+  // Apply combo multiplier (1x to 5x)
+  value *= comboMultiplier;
+
   // Apply meteor_barrage multiplier
   if (state.omActive['meteor_barrage'] && state.omActive['meteor_barrage'] > 0) {
     value *= 5;
@@ -206,8 +212,8 @@ export function getClickValue(state: GameState): number {
 /**
  * Processes a single click action.
  */
-export function processClick(state: GameState): GameState {
-  const clickValue = getClickValue(state);
+export function processClick(state: GameState, comboMultiplier: number = 1): GameState {
+  const clickValue = getClickValue(state, comboMultiplier);
 
   return {
     ...state,

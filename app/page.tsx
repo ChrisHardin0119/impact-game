@@ -3,7 +3,7 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
 import { GameState, TabName, BuyMode, FloatingNumber } from '@/lib/types';
 import { defaultGameState } from '@/lib/prestige';
-import { processClick, buyProcess, activateOrbitalMechanic, getMassPerSecond } from '@/lib/gameEngine';
+import { processClick, buyProcess, activateOrbitalMechanic, getMassPerSecond, getClickValue } from '@/lib/gameEngine';
 import { getProcessCost, getMaxAffordable, PROCESSES } from '@/lib/processes';
 import { ORBITAL_MECHANICS, getUnlockedOM } from '@/lib/orbitalMechanics';
 import { CORE_UPGRADES, canPurchaseUpgrade, getUpgradeCost } from '@/lib/upgrades';
@@ -37,6 +37,10 @@ export default function GamePage() {
   const lastHintCheckRef = useRef(0);
   const [pendingBoost, setPendingBoost] = useState<BoostType | null>(null);
   const [showFeedback, setShowFeedback] = useState(false);
+
+  // Click combo system
+  const [clickCombo, setClickCombo] = useState(0); // number of rapid clicks (0–20)
+  const comboTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const setState = useCallback((s: GameState) => {
     stateRef.current = s;
@@ -155,17 +159,29 @@ export default function GamePage() {
     setPendingBoost(null);
   }, []);
 
-  // Click handler
+  // Click handler with combo system
   const handleClick = useCallback((e: React.MouseEvent) => {
-    const newState = processClick(stateRef.current);
+    // Build combo: each rapid click increments combo (max 20 → 5x multiplier)
+    setClickCombo(prev => {
+      const newCombo = Math.min(prev + 1, 20);
+      // Reset combo decay timer
+      if (comboTimerRef.current) clearTimeout(comboTimerRef.current);
+      comboTimerRef.current = setTimeout(() => setClickCombo(0), 1500);
+      return newCombo;
+    });
+
+    // Combo multiplier: 1x at 0, up to 5x at 20 combo
+    const comboMult = 1 + (Math.min(clickCombo, 20) / 20) * 4;
+    const newState = processClick(stateRef.current, comboMult);
+    const clickValue = newState.mass - stateRef.current.mass;
     setState(newState);
     const id = nextFloatId.current++;
     const rect = e.currentTarget.getBoundingClientRect();
     const x = e.clientX - rect.left;
     const y = e.clientY - rect.top;
-    setFloatingNums(prev => [...prev, { id, value: newState.mass - stateRef.current.mass + (newState.mass - stateRef.current.mass === 0 ? 1 : 0), x, y, opacity: 1 }]);
+    setFloatingNums(prev => [...prev, { id, value: clickValue || 1, x, y, opacity: 1 }]);
     setTimeout(() => setFloatingNums(prev => prev.filter(f => f.id !== id)), 1000);
-  }, [setState]);
+  }, [setState, clickCombo]);
 
   // Helper: calculate buy info for a process based on current buy mode
   const getBuyInfo = useCallback((processDef: typeof PROCESSES[0], owned: number, mass: number, buyMode: BuyMode, hasDiscount: boolean) => {
@@ -327,7 +343,7 @@ export default function GamePage() {
           <div className="flex gap-2 shrink-0 items-center">
             <button className="btn-secondary text-sm px-2.5 py-1" onClick={() => saveGame(state)}>Save</button>
             <button className="btn-secondary text-sm px-2.5 py-1" onClick={() => setTab('stats')}>⚙</button>
-            <span className="text-xs text-gray-600">v7</span>
+            <span className="text-xs text-gray-600">v8</span>
           </div>
         </div>
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-x-4 gap-y-2 sm:gap-3">
@@ -399,10 +415,19 @@ export default function GamePage() {
             {/* Click area */}
             <div className="flex justify-center mb-4">
               <div className="relative cursor-pointer select-none" onClick={handleClick}>
-                <div className="w-28 h-28 sm:w-32 sm:h-32 rounded-full bg-gradient-to-br from-gray-600 to-gray-800 border-2 border-gray-500 flex items-center justify-center text-4xl hover:scale-105 transition-transform active:scale-95" style={{boxShadow: `0 0 ${Math.min(30, Math.log10(state.mass + 1) * 3)}px var(--color-neon)`}}>
+                <div className={`w-28 h-28 sm:w-32 sm:h-32 rounded-full bg-gradient-to-br from-gray-600 to-gray-800 border-2 flex items-center justify-center text-4xl hover:scale-105 transition-all active:scale-95 ${clickCombo >= 15 ? 'border-yellow' : clickCombo >= 8 ? 'border-orange' : clickCombo >= 3 ? 'border-neon' : 'border-gray-500'}`} style={{boxShadow: `0 0 ${Math.min(30, Math.log10(state.mass + 1) * 3) + clickCombo * 1.5}px ${clickCombo >= 15 ? 'var(--color-yellow)' : clickCombo >= 8 ? 'var(--color-orange)' : 'var(--color-neon)'}`}}>
                   🪨
                 </div>
-                <div className="absolute -bottom-5 left-1/2 -translate-x-1/2 text-sm text-gray-400">Click for mass</div>
+                {/* Click value display */}
+                <div className="absolute -bottom-5 left-1/2 -translate-x-1/2 text-sm text-gray-400 whitespace-nowrap">
+                  +{fmt(getClickValue(state, 1 + (Math.min(clickCombo, 20) / 20) * 4))}/click
+                </div>
+                {/* Combo indicator */}
+                {clickCombo >= 3 && (
+                  <div className={`absolute -top-3 left-1/2 -translate-x-1/2 text-xs font-bold px-2 py-0.5 rounded-full ${clickCombo >= 15 ? 'bg-yellow text-space' : clickCombo >= 8 ? 'bg-orange text-space' : 'bg-neon text-space'}`}>
+                    {(1 + (Math.min(clickCombo, 20) / 20) * 4).toFixed(1)}x COMBO
+                  </div>
+                )}
                 {floatingNums.map(f => (
                   <div key={f.id} className="float-up absolute text-neon font-bold pointer-events-none text-base" style={{left: f.x, top: f.y}}>
                     +{fmt(f.value)}
