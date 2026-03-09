@@ -98,7 +98,7 @@ export function getProcessProduction(
   }
 
   // Apply production boost (2x from ad/boost)
-  if (state.boosts.productionBoost.active && state.boosts.productionBoost.endsAt > Date.now()) {
+  if (state.boosts?.productionBoost?.active && state.boosts.productionBoost.endsAt > Date.now()) {
     massProduction *= 2;
     gravityProduction *= 2;
     densityProduction *= 2;

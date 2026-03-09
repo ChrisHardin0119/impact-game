@@ -18,9 +18,34 @@ export function loadGame(): GameState | null {
   try {
     const raw = localStorage.getItem(SAVE_KEY);
     if (!raw) return null;
-    const parsed = JSON.parse(raw) as GameState;
-    // Version migration could go here
-    return parsed;
+    const parsed = JSON.parse(raw);
+    // Merge with defaults to handle missing fields from older saves
+    const defaults = defaultGameState();
+    const migrated: GameState = {
+      ...defaults,
+      ...parsed,
+      // Ensure nested objects are properly merged (not overwritten by old save)
+      boosts: {
+        ...defaults.boosts,
+        ...(parsed.boosts || {}),
+        productionBoost: {
+          ...defaults.boosts.productionBoost,
+          ...(parsed.boosts?.productionBoost || {}),
+        },
+        prestigeDouble: {
+          ...defaults.boosts.prestigeDouble,
+          ...(parsed.boosts?.prestigeDouble || {}),
+        },
+        massDrop: {
+          ...defaults.boosts.massDrop,
+          ...(parsed.boosts?.massDrop || {}),
+        },
+      },
+      tutorialCompleted: parsed.tutorialCompleted || defaults.tutorialCompleted,
+      tutorialSkipped: parsed.tutorialSkipped ?? defaults.tutorialSkipped,
+      adsRemoved: parsed.adsRemoved ?? defaults.adsRemoved,
+    };
+    return migrated;
   } catch (e) {
     console.error('Failed to load:', e);
     return null;
@@ -63,8 +88,24 @@ export function exportSave(state: GameState): string {
 
 export function importSave(encoded: string): GameState | null {
   try {
-    const parsed = JSON.parse(atob(encoded)) as GameState;
-    return parsed;
+    const parsed = JSON.parse(atob(encoded));
+    // Use same migration logic as loadGame
+    const defaults = defaultGameState();
+    const migrated: GameState = {
+      ...defaults,
+      ...parsed,
+      boosts: {
+        ...defaults.boosts,
+        ...(parsed.boosts || {}),
+        productionBoost: { ...defaults.boosts.productionBoost, ...(parsed.boosts?.productionBoost || {}) },
+        prestigeDouble: { ...defaults.boosts.prestigeDouble, ...(parsed.boosts?.prestigeDouble || {}) },
+        massDrop: { ...defaults.boosts.massDrop, ...(parsed.boosts?.massDrop || {}) },
+      },
+      tutorialCompleted: parsed.tutorialCompleted || defaults.tutorialCompleted,
+      tutorialSkipped: parsed.tutorialSkipped ?? defaults.tutorialSkipped,
+      adsRemoved: parsed.adsRemoved ?? defaults.adsRemoved,
+    };
+    return migrated;
   } catch {
     return null;
   }
