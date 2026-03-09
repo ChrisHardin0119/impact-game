@@ -46,15 +46,17 @@ export interface ProcessDef {
   unlockCondition: { type: 'mass' | 'tier' | 'gravity'; value: number } | null;
 }
 
-// --- Orbital Mechanics (active abilities) ---
+// --- Orbital Mechanics (toggle or one-shot abilities) ---
 export interface OrbitalMechanicDef {
   id: string;
   name: string;
   emoji: string;
   desc: string;
-  energyCost: number;
-  cooldown: number;   // seconds
-  duration: number;    // seconds (0 = instant)
+  isToggle: boolean;       // true = energy drain per sec; false = one-shot
+  energyCost: number;      // startup cost (toggles) or activation cost (one-shots)
+  energyDrain: number;     // energy per second while toggled ON (0 for one-shots)
+  cooldown: number;        // seconds (one-shots only, 0 for toggles)
+  duration: number;        // seconds (one-shots only, 0 for toggles/instant)
   unlockTier: PrestigeTier;
 }
 
@@ -107,10 +109,12 @@ export interface GameState {
   // Processes (buildings) owned
   processes: Record<string, number>; // processId -> count
 
-  // Orbital mechanic cooldowns (seconds remaining)
+  // Orbital mechanic cooldowns (seconds remaining, one-shots)
   omCooldowns: Record<string, number>;
-  // Active orbital mechanic effects (seconds remaining)
+  // Active orbital mechanic effects (seconds remaining, one-shots)
   omActive: Record<string, number>;
+  // Toggle states (which toggles are currently ON)
+  omToggles: Record<string, boolean>;
   // Whether singularity pull was used this run
   singularityUsed: boolean;
 

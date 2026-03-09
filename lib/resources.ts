@@ -73,7 +73,14 @@ export function getEnergyRegen(state: GameState): number {
   const kineticResonance = state.coreUpgrades['kinetic_resonance'] || 0;
   const multiplier = 1 + kineticResonance * 0.5;
 
-  return baseRegen * multiplier;
+  let regen = baseRegen * multiplier;
+
+  // Energy Siphon toggle: +0.5 regen (tradeoff: costs gravity in processTick)
+  if (state.omToggles?.['energy_siphon']) {
+    regen += 0.5;
+  }
+
+  return regen;
 }
 
 /**

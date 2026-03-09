@@ -5,12 +5,12 @@ import { GameState, TabName, BuyMode, FloatingNumber } from '@/lib/types';
 import { defaultGameState } from '@/lib/prestige';
 import { processClick, buyProcess, activateOrbitalMechanic, getMassPerSecond, getClickValue } from '@/lib/gameEngine';
 import { getProcessCost, getMaxAffordable, PROCESSES } from '@/lib/processes';
-import { ORBITAL_MECHANICS, getUnlockedOM } from '@/lib/orbitalMechanics';
+import { ORBITAL_MECHANICS, getUnlockedOM, getTotalEnergyDrain } from '@/lib/orbitalMechanics';
 import { CORE_UPGRADES, canPurchaseUpgrade, getUpgradeCost } from '@/lib/upgrades';
 import { COMPOSITIONS, getUnlockedCompositions } from '@/lib/compositions';
 import { calcShards, canPrestige, getPrestigeResetState, PRESTIGE_TIERS } from '@/lib/prestige';
 import { DISCOVERIES } from '@/lib/discoveries';
-import { getGravityMultiplier, getDensityMultiplier } from '@/lib/resources';
+import { getGravityMultiplier, getDensityMultiplier, getEnergyRegen, getMaxEnergy } from '@/lib/resources';
 import { fmt, fmtPct, fmtTime } from '@/lib/format';
 import { saveGame, loadGame, calculateOfflineGains, hardReset, exportSave, importSave } from '@/lib/saveLoad';
 import { useGameLoop } from '@/hooks/useGameLoop';
@@ -226,8 +226,8 @@ export default function GamePage() {
     if (!processDef) return;
 
     const owned = s.processes[processId] || 0;
-    const hasDiscount = s.omActive['cosmic_expansion'] && s.omActive['cosmic_expansion'] > 0;
-    const info = getBuyInfo(processDef, owned, s.mass, s.buyMode, !!hasDiscount);
+    const hasDiscount = s.omToggles?.['process_optimizer'] || false;
+    const info = getBuyInfo(processDef, owned, s.mass, s.buyMode, hasDiscount);
 
     if (!info.canAfford || info.count <= 0) return;
 
@@ -239,12 +239,20 @@ export default function GamePage() {
     setState(newState);
   }, [setState, getBuyInfo]);
 
-  // Activate orbital mechanic
+  // Activate orbital mechanic (toggle or one-shot)
   const handleOM = useCallback((omId: string) => {
-    const result = activateOrbitalMechanic(omId, stateRef.current);
+    const omDef = ORBITAL_MECHANICS.find(o => o.id === omId);
+    if (!omDef) return;
+    const currentState = stateRef.current;
+    const result = activateOrbitalMechanic(omId, currentState);
     if (result) {
       setState(result);
-      addToast(`Activated ${ORBITAL_MECHANICS.find(o => o.id === omId)?.name}`, '🚀');
+      if (omDef.isToggle) {
+        const wasOn = currentState.omToggles?.[omId] || false;
+        addToast(`${omDef.name} ${wasOn ? 'OFF' : 'ON'}`, wasOn ? '🔴' : '🟢');
+      } else {
+        addToast(`Activated ${omDef.name}`, '🚀');
+      }
     }
   }, [setState, addToast]);
 
@@ -343,7 +351,7 @@ export default function GamePage() {
           <div className="flex gap-2 shrink-0 items-center">
             <button className="btn-secondary text-sm px-2.5 py-1" onClick={() => saveGame(state)}>Save</button>
             <button className="btn-secondary text-sm px-2.5 py-1" onClick={() => setTab('stats')}>⚙</button>
-            <span className="text-xs text-gray-600">v9</span>
+            <span className="text-xs text-gray-600">v10</span>
           </div>
         </div>
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-x-4 gap-y-2 sm:gap-3">
@@ -450,8 +458,8 @@ export default function GamePage() {
             <div className="space-y-2">
               {PROCESSES.map(p => {
                 const owned = state.processes[p.id] || 0;
-                const hasDiscount = state.omActive['cosmic_expansion'] && state.omActive['cosmic_expansion'] > 0;
-                const buyInfo = getBuyInfo(p, owned, state.mass, state.buyMode, !!hasDiscount);
+                const hasDiscount = state.omToggles?.['process_optimizer'] || false;
+                const buyInfo = getBuyInfo(p, owned, state.mass, state.buyMode, hasDiscount);
                 const unlocked = !p.unlockCondition ||
                   (p.unlockCondition.type === 'mass' && state.totalMassEarned >= p.unlockCondition.value) ||
                   (p.unlockCondition.type === 'tier' && state.currentTier >= p.unlockCondition.value) ||
@@ -482,33 +490,138 @@ export default function GamePage() {
         )}
 
         {/* ORBITAL TAB */}
-        {activeTab === 'orbital' && (
-          <div>
-            <h2 className="glow-purple text-lg mb-3">Orbital Mechanics</h2>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-              {unlockedOM.map(om => {
-                const cd = state.omCooldowns[om.id] || 0;
-                const isActive = (state.omActive[om.id] || 0) > 0;
-                const canUse = state.energy >= om.energyCost && cd <= 0 && !(om.id === 'singularity_pull' && state.singularityUsed);
-                return (
-                  <button key={om.id} className={`card text-left relative ${isActive ? 'border-purple box-glow-purple' : canUse ? 'hover:border-neon' : 'opacity-50'}`} onClick={() => handleOM(om.id)} disabled={!canUse}>
-                    <div className="flex items-center gap-2">
-                      <span className="text-lg">{om.emoji}</span>
-                      <span className="font-bold text-sm">{om.name}</span>
-                    </div>
-                    <div className="text-sm text-gray-400 mt-1">{om.desc}</div>
-                    <div className="flex justify-between mt-2 text-sm">
-                      <span className="text-orange">{om.energyCost}E</span>
-                      <span className="text-gray-400">{om.duration > 0 ? `${om.duration}s` : 'Instant'}</span>
-                      <span className={cd > 0 ? 'text-red' : 'text-green'}>{cd > 0 ? `${cd.toFixed(1)}s` : 'Ready'}</span>
-                    </div>
-                    {isActive && <div className="absolute top-1 right-2 text-sm text-purple">{state.omActive[om.id]?.toFixed(1)}s</div>}
-                  </button>
-                );
-              })}
+        {activeTab === 'orbital' && (() => {
+          const totalDrain = getTotalEnergyDrain(state.omToggles || {});
+          const energyRegen = getEnergyRegen(state);
+          const maxEnergy = getMaxEnergy(state);
+          const netEnergy = energyRegen - totalDrain;
+          const isSustainable = netEnergy >= 0;
+          const activeToggleCount = Object.values(state.omToggles || {}).filter(Boolean).length;
+          const toggleOMs = unlockedOM.filter(om => om.isToggle);
+          const oneShotOMs = unlockedOM.filter(om => !om.isToggle);
+
+          return (
+            <div>
+              {/* Energy Status Header */}
+              <div className={`card mb-3 ${isSustainable ? 'border-green' : 'border-red'}`} style={{borderWidth: '2px'}}>
+                <div className="flex items-center justify-between mb-1">
+                  <span className="font-bold text-base">⚡ Energy</span>
+                  <span className="text-base font-bold" style={{color: isSustainable ? 'var(--color-green)' : 'var(--color-red)'}}>
+                    {Math.floor(state.energy)}/{maxEnergy}
+                  </span>
+                </div>
+                <div className="resource-bar mb-2">
+                  <div className="resource-bar-fill" style={{
+                    width: `${(state.energy / maxEnergy) * 100}%`,
+                    background: state.energy < 20 ? 'var(--color-red)' : isSustainable ? 'var(--color-green)' : 'var(--color-orange)'
+                  }} />
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span className="text-green">Regen: +{energyRegen.toFixed(1)}/s</span>
+                  <span className="text-red">Drain: −{totalDrain.toFixed(1)}/s</span>
+                  <span className="font-bold" style={{color: isSustainable ? 'var(--color-green)' : 'var(--color-red)'}}>
+                    Net: {netEnergy >= 0 ? '+' : ''}{netEnergy.toFixed(1)}/s
+                  </span>
+                </div>
+                {activeToggleCount > 0 && (
+                  <div className="text-sm text-gray-400 mt-1">{activeToggleCount} toggle{activeToggleCount !== 1 ? 's' : ''} active</div>
+                )}
+              </div>
+
+              {/* Toggle Mechanics */}
+              <h2 className="glow-purple text-lg mb-2">Toggles</h2>
+              <div className="text-sm text-gray-400 mb-2">Click to turn ON/OFF. Drains energy while active.</div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mb-4">
+                {toggleOMs.map(om => {
+                  const isOn = state.omToggles?.[om.id] || false;
+                  const canAffordStartup = state.energy >= om.energyCost;
+                  const canToggle = isOn || canAffordStartup;
+                  return (
+                    <button
+                      key={om.id}
+                      className={`card text-left relative p-3 transition-all ${
+                        isOn
+                          ? 'border-green box-glow-green'
+                          : canToggle
+                          ? 'hover:border-neon'
+                          : 'opacity-50'
+                      }`}
+                      onClick={() => handleOM(om.id)}
+                      disabled={!canToggle}
+                    >
+                      {/* ON/OFF badge */}
+                      <div className={`absolute top-2 right-2 text-xs font-bold px-2 py-0.5 rounded-full ${
+                        isOn ? 'bg-green text-space' : 'bg-gray-700 text-gray-400'
+                      }`}>
+                        {isOn ? 'ON' : 'OFF'}
+                      </div>
+                      <div className="flex items-center gap-2 pr-12">
+                        <span className="text-lg">{om.emoji}</span>
+                        <span className="font-bold text-sm">{om.name}</span>
+                      </div>
+                      <div className="text-sm text-gray-400 mt-1">{om.desc}</div>
+                      <div className="flex gap-3 mt-2 text-sm">
+                        <span className="text-orange">{om.energyCost}E start</span>
+                        <span className="text-red">−{om.energyDrain}/s drain</span>
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+
+              {/* One-Shot Mechanics */}
+              {oneShotOMs.length > 0 && (
+                <>
+                  <h2 className="glow-orange text-lg mb-2">One-Shots</h2>
+                  <div className="text-sm text-gray-400 mb-2">Activate for a burst effect. Has cooldown.</div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    {oneShotOMs.map(om => {
+                      const cd = state.omCooldowns[om.id] || 0;
+                      const isActive = (state.omActive[om.id] || 0) > 0;
+                      const canUse = state.energy >= om.energyCost && cd <= 0 && !(om.id === 'singularity_pull' && state.singularityUsed);
+                      return (
+                        <button
+                          key={om.id}
+                          className={`card text-left relative p-3 ${
+                            isActive
+                              ? 'border-purple box-glow-purple'
+                              : canUse
+                              ? 'hover:border-neon'
+                              : 'opacity-50'
+                          }`}
+                          onClick={() => handleOM(om.id)}
+                          disabled={!canUse}
+                        >
+                          <div className="flex items-center gap-2">
+                            <span className="text-lg">{om.emoji}</span>
+                            <span className="font-bold text-sm">{om.name}</span>
+                          </div>
+                          <div className="text-sm text-gray-400 mt-1">{om.desc}</div>
+                          <div className="flex justify-between mt-2 text-sm">
+                            <span className="text-orange">{om.energyCost}E</span>
+                            <span className="text-gray-400">{om.duration > 0 ? `${om.duration}s` : 'Once/run'}</span>
+                            <span className={cd > 0 ? 'text-red' : 'text-green'}>
+                              {om.id === 'singularity_pull' && state.singularityUsed
+                                ? 'Used'
+                                : cd > 0
+                                ? `${cd.toFixed(1)}s`
+                                : 'Ready'}
+                            </span>
+                          </div>
+                          {isActive && (
+                            <div className="absolute top-2 right-2 text-sm text-purple font-bold">
+                              {state.omActive[om.id]?.toFixed(1)}s
+                            </div>
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </>
+              )}
             </div>
-          </div>
-        )}
+          );
+        })()}
 
         {/* UPGRADES TAB */}
         {activeTab === 'upgrades' && (

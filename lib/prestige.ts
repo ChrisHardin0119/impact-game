@@ -113,6 +113,7 @@ export function getPrestigeResetState(state: GameState): GameState {
     // Orbital mechanics reset
     omCooldowns: {},
     omActive: {},
+    omToggles: {},
     singularityUsed: false,
 
     // Core upgrades PERSIST (permanently unlocked)
@@ -220,6 +221,7 @@ export function defaultGameState(): GameState {
     // Orbital mechanics
     omCooldowns: {},
     omActive: {},
+    omToggles: {},
     singularityUsed: false,
 
     // Core upgrades

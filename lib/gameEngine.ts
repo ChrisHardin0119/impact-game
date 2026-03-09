@@ -1,7 +1,7 @@
 import { GameState } from './types';
 import { getComposition } from './compositions';
 import { PROCESSES } from './processes';
-import { ORBITAL_MECHANICS } from './orbitalMechanics';
+import { ORBITAL_MECHANICS, getTotalEnergyDrain } from './orbitalMechanics';
 import {
   getGravityMultiplier,
   getDensityMultiplier,
@@ -51,10 +51,9 @@ export function getProcessProduction(
       let composition = state.composition ? getComposition(state.composition) : null;
       const compSynergyMult = composition?.synergyMult || 1;
 
-      // Check for magnetic_polarity discovery bonus
       let synergyBonus = 0.1 * synergyTargetCount * compSynergyMult;
       if (state.discoveries.includes('magnetic_polarity')) {
-        synergyBonus *= 2; // +100% synergy strength
+        synergyBonus *= 2;
       }
 
       const synergyMult = 1 + synergyBonus;
@@ -79,22 +78,40 @@ export function getProcessProduction(
   massProduction *= densityMult;
   densityProduction *= densityMult;
 
-  // Apply orbital mechanics
-  if (state.omActive['gravitational_focus'] && state.omActive['gravitational_focus'] > 0) {
+  // ===== TOGGLE EFFECTS =====
+  // Mass Pump: 1.3x mass
+  if (state.omToggles?.['mass_pump']) {
+    massProduction *= 1.3;
+  }
+  // Temporal Flow: 1.5x ALL
+  if (state.omToggles?.['temporal_flow']) {
     massProduction *= 1.5;
     gravityProduction *= 1.5;
+    densityProduction *= 1.5;
+  }
+  // Gravity Vortex: 2x gravity
+  if (state.omToggles?.['gravity_vortex']) {
+    gravityProduction *= 2;
+  }
+  // Density Forge: 2x density
+  if (state.omToggles?.['density_forge']) {
+    densityProduction *= 2;
   }
 
-  // Resonance cascade: triple synergy bonus portion
-  if (state.omActive['resonance_cascade'] && state.omActive['resonance_cascade'] > 0) {
+  // ===== ONE-SHOT ACTIVE EFFECTS =====
+  // Synergy Cascade: 2x synergy portion
+  if (state.omActive['synergy_cascade'] && state.omActive['synergy_cascade'] > 0) {
     if (processDef.synergyTarget) {
       const synergyTargetCount = state.processes[processDef.synergyTarget] || 0;
       if (synergyTargetCount > 0) {
-        // Apply extra 2x multiplier to synergy portion (triple total)
         massProduction *= 2;
         gravityProduction *= 2;
       }
     }
+  }
+  // Chromatic Burst: 3x mass
+  if (state.omActive['chromatic_burst'] && state.omActive['chromatic_burst'] > 0) {
+    massProduction *= 3;
   }
 
   // Apply production boost (2x from ad/boost)
@@ -166,7 +183,6 @@ export function getTotalProduction(
 
 /**
  * Calculates the current mass gained per second from all processes.
- * Used to display the mass/s counter in the UI.
  */
 export function getMassPerSecond(state: GameState): number {
   const production = getTotalProduction(state);
@@ -175,18 +191,11 @@ export function getMassPerSecond(state: GameState): number {
 
 /**
  * Calculates the value of a single click.
- * Base: 1 + 10% of mass/sec (so clicks scale with progress)
- * * composition clickMult
- * * (1 + totalClicks * 0.0001) capped at 2x
- * * combo multiplier (1x–5x based on rapid clicking)
- * * 5x if meteor_barrage active
  */
 export function getClickValue(state: GameState, comboMultiplier: number = 1): number {
-  // Base value scales with production: 1 + 10% of mass/sec
   const mps = getMassPerSecond(state);
   let value = 1 + mps * 0.1;
 
-  // Apply composition multiplier
   if (state.composition) {
     const composition = getComposition(state.composition);
     if (composition) {
@@ -194,15 +203,13 @@ export function getClickValue(state: GameState, comboMultiplier: number = 1): nu
     }
   }
 
-  // Apply click scaling (capped at 2x)
   const clickScaling = Math.min(1 + state.totalClicks * 0.0001, 2);
   value *= clickScaling;
 
-  // Apply combo multiplier (1x to 5x)
   value *= comboMultiplier;
 
-  // Apply meteor_barrage multiplier
-  if (state.omActive['meteor_barrage'] && state.omActive['meteor_barrage'] > 0) {
+  // Meteor Strike one-shot: 5x click power
+  if (state.omActive['meteor_strike'] && state.omActive['meteor_strike'] > 0) {
     value *= 5;
   }
 
@@ -226,7 +233,6 @@ export function processClick(state: GameState, comboMultiplier: number = 1): Gam
 
 /**
  * Processes a time tick (main game loop).
- * Handles production, decay, energy regen, cooldowns, comets, and state updates.
  */
 export function processTick(state: GameState, dt: number): GameState {
   let newState = { ...state };
@@ -239,6 +245,23 @@ export function processTick(state: GameState, dt: number): GameState {
   newState.runMassEarned += production.mass * dt;
   newState.totalMassEarned += production.mass * dt;
 
+  // ===== TOGGLE DIRECT EFFECTS (gravity/density per sec) =====
+  if (newState.omToggles?.['gravity_harness']) {
+    newState.gravity += 0.2 * dt;
+  }
+  if (newState.omToggles?.['density_pulse']) {
+    newState.density += 0.003 * dt;
+  }
+  if (newState.omToggles?.['gravity_brake']) {
+    newState.gravity -= 0.15 * dt;
+  }
+  if (newState.omToggles?.['density_vent']) {
+    newState.density -= 0.005 * dt;
+  }
+  if (newState.omToggles?.['energy_siphon']) {
+    newState.gravity -= 0.1 * dt; // tradeoff: lose gravity for energy regen
+  }
+
   // Apply density decay
   const decayRate = getDensityDecay(newState.currentTier);
   newState.density -= decayRate * dt;
@@ -247,28 +270,43 @@ export function processTick(state: GameState, dt: number): GameState {
   newState.gravity = Math.max(0, Math.min(300, newState.gravity));
   newState.density = Math.max(0, Math.min(100, newState.density));
 
-  // Handle energy regeneration
+  // ===== ENERGY: regen then drain from toggles =====
   const maxEnergy = getMaxEnergy(newState);
   const energyRegen = getEnergyRegen(newState);
-  newState.energy = Math.min(maxEnergy, newState.energy + energyRegen * dt);
+  const totalDrain = getTotalEnergyDrain(newState.omToggles || {});
+  const netEnergy = energyRegen - totalDrain;
+  newState.energy += netEnergy * dt;
+
+  // Cap at max
+  newState.energy = Math.min(maxEnergy, newState.energy);
+
+  // Auto-disable all toggles if energy depleted
+  if (newState.energy <= 0) {
+    newState.energy = 0;
+    const newToggles = { ...newState.omToggles };
+    for (const key in newToggles) {
+      newToggles[key] = false;
+    }
+    newState.omToggles = newToggles;
+  }
 
   // Handle energy overflow (if energy_overflow upgrade owned)
   if (newState.coreUpgrades['energy_overflow'] && newState.coreUpgrades['energy_overflow'] > 0) {
     if (newState.energy >= maxEnergy) {
       const overflow = newState.energy - maxEnergy;
-      newState.mass += overflow * 1000; // Convert excess to mass at 1000:1
+      newState.mass += overflow * 1000;
       newState.energy = maxEnergy;
     }
   }
 
-  // Decrement orbital mechanic cooldowns
+  // Decrement orbital mechanic cooldowns (one-shots)
   const newCooldowns = { ...newState.omCooldowns };
   for (const omId in newCooldowns) {
     newCooldowns[omId] = Math.max(0, newCooldowns[omId] - dt);
   }
   newState.omCooldowns = newCooldowns;
 
-  // Decrement orbital mechanic active durations
+  // Decrement orbital mechanic active durations (one-shots)
   const newActive = { ...newState.omActive };
   for (const omId in newActive) {
     const newDuration = newActive[omId] - dt;
@@ -307,8 +345,8 @@ export function processTick(state: GameState, dt: number): GameState {
 }
 
 /**
- * Activates an orbital mechanic if conditions are met.
- * Returns null if activation fails (not enough energy, cooldown, etc).
+ * Activates or toggles an orbital mechanic.
+ * For toggles: flips on/off. For one-shots: existing cooldown-based logic.
  */
 export function activateOrbitalMechanic(omId: string, state: GameState): GameState | null {
   const omDef = ORBITAL_MECHANICS.find(o => o.id === omId);
@@ -316,17 +354,36 @@ export function activateOrbitalMechanic(omId: string, state: GameState): GameSta
     return null;
   }
 
-  // Check energy and cooldown
-  if (state.energy < omDef.energyCost) {
+  let newState = { ...state };
+
+  // === TOGGLE MECHANIC ===
+  if (omDef.isToggle) {
+    const currentlyOn = newState.omToggles?.[omId] || false;
+
+    if (currentlyOn) {
+      // Turn OFF
+      newState.omToggles = { ...newState.omToggles, [omId]: false };
+      return newState;
+    } else {
+      // Turn ON — check startup energy
+      if (newState.energy < omDef.energyCost) {
+        return null; // Not enough energy for startup
+      }
+      newState.energy -= omDef.energyCost;
+      newState.omToggles = { ...newState.omToggles, [omId]: true };
+      return newState;
+    }
+  }
+
+  // === ONE-SHOT MECHANIC ===
+  if (newState.energy < omDef.energyCost) {
     return null;
   }
 
-  const cooldown = state.omCooldowns[omId] || 0;
+  const cooldown = newState.omCooldowns[omId] || 0;
   if (cooldown > 0) {
     return null;
   }
-
-  let newState = { ...state };
 
   // Deduct energy
   newState.energy -= omDef.energyCost;
@@ -339,39 +396,17 @@ export function activateOrbitalMechanic(omId: string, state: GameState): GameSta
     newState.omActive = { ...newState.omActive, [omId]: omDef.duration };
   }
 
-  // Special handling per orbital mechanic
+  // Special handling
   switch (omId) {
-    case 'density_compression':
-      // Instantly add 15% density (capped at 100)
-      newState.density = Math.min(100, newState.density + 15);
-      break;
-
-    case 'gravity_well':
-      // Instantly gain +15 gravity
-      newState.gravity = Math.min(300, newState.gravity + 15);
-      break;
-
     case 'singularity_pull':
-      // Check if already used
       if (newState.singularityUsed) {
         return null;
       }
-      // Add shards (25% of run mass earned)
-      const shardValue = newState.runMassEarned * 0.25;
-      const shardsGained = calcShards(shardValue, newState.currentTier);
-      newState.currentShards += shardsGained;
+      // Convert all mass into gravity
+      const gravGain = Math.min(300 - newState.gravity, newState.mass * 0.001);
+      newState.gravity = Math.min(300, newState.gravity + gravGain);
+      newState.mass = 0;
       newState.singularityUsed = true;
-      break;
-
-    case 'resonance_echo':
-      // Check if gravitational_focus is active
-      if (newState.omActive['gravitational_focus'] && newState.omActive['gravitational_focus'] > 0) {
-        if (newState.discoveries.includes('resonance_echo')) {
-          // Add 2s to both durations
-          newState.omActive[omId] = (newState.omActive[omId] || 0) + 2;
-          newState.omActive['gravitational_focus'] += 2;
-        }
-      }
       break;
   }
 
@@ -380,8 +415,6 @@ export function activateOrbitalMechanic(omId: string, state: GameState): GameSta
 
 /**
  * Purchases a process for the given count.
- * Returns null if not enough mass or invalid process.
- * Applies cosmic_expansion cost reduction if active.
  */
 export function buyProcess(
   processId: string,
@@ -393,22 +426,19 @@ export function buyProcess(
     return null;
   }
 
-  // Calculate cost
   let costPerUnit = processDef.baseCost;
 
-  // Apply cosmic_expansion cost reduction (50%)
-  if (state.omActive['cosmic_expansion'] && state.omActive['cosmic_expansion'] > 0) {
-    costPerUnit *= 0.5;
+  // Process Optimizer toggle: 40% off
+  if (state.omToggles?.['process_optimizer']) {
+    costPerUnit *= 0.6;
   }
 
   const totalCost = costPerUnit * count;
 
-  // Check if can afford
   if (state.mass < totalCost) {
     return null;
   }
 
-  // Deduct mass and add processes
   return {
     ...state,
     mass: state.mass - totalCost,
@@ -421,15 +451,10 @@ export function buyProcess(
 
 /**
  * Spawns a comet event.
- * Comet value based on current resources.
- * Ice composition gets 1.5x bonus.
- * Returns updated state and comet value for UI.
  */
 export function spawnComet(state: GameState): { state: GameState; value: number } {
-  // Calculate comet value
   let value = (state.mass + state.gravity * 100 + state.density * 1000) * 0.05;
 
-  // Apply Ice composition bonus
   if (state.composition === 'ice') {
     value *= 1.5;
   }
@@ -440,11 +465,10 @@ export function spawnComet(state: GameState): { state: GameState; value: number 
     cometsCaught: state.cometsCaught + 1,
   };
 
-  // Reset nextCometIn to random interval
   if (state.composition === 'ice') {
-    newState.nextCometIn = 3 + Math.random() * 5; // 3-8s
+    newState.nextCometIn = 3 + Math.random() * 5;
   } else {
-    newState.nextCometIn = 15 + Math.random() * 15; // 15-30s
+    newState.nextCometIn = 15 + Math.random() * 15;
   }
 
   return { state: newState, value };
