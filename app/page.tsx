@@ -343,7 +343,7 @@ export default function GamePage() {
           <div className="flex gap-2 shrink-0 items-center">
             <button className="btn-secondary text-sm px-2.5 py-1" onClick={() => saveGame(state)}>Save</button>
             <button className="btn-secondary text-sm px-2.5 py-1" onClick={() => setTab('stats')}>⚙</button>
-            <span className="text-xs text-gray-600">v8</span>
+            <span className="text-xs text-gray-600">v9</span>
           </div>
         </div>
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-x-4 gap-y-2 sm:gap-3">

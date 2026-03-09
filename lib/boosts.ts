@@ -35,7 +35,7 @@ export const BOOST_DEFS: BoostDef[] = [
     id: 'massDrop',
     name: 'Mass Drop',
     emoji: '🎁',
-    desc: 'Instantly gain 10% of your lifetime mass',
+    desc: 'Instantly gain 3% of your current run mass',
     adLabel: 'Watch Ad',
     freeLabel: 'Boost',
     cooldown: 300, // 5 min cooldown
@@ -87,7 +87,7 @@ export function applyBoost(type: BoostType, state: GameState): GameState | null 
     case 'massDrop': {
       const cooldownEnd = state.boosts.massDrop.lastUsed + 300000; // 5 min
       if (now < cooldownEnd) return null; // On cooldown
-      const dropAmount = state.totalMassEarned * 0.1;
+      const dropAmount = state.runMassEarned * 0.03; // 3% of current run mass (resets on prestige)
       return {
         ...state,
         mass: state.mass + dropAmount,

@@ -56,18 +56,18 @@ export function getDensityDecay(tier: PrestigeTier): number {
 
 /**
  * Calculates the energy regeneration rate per second.
- * Base: 5/sec
+ * Base: 1/sec (slow — energy is a strategic resource)
  * + state.energyRegen (from upgrades)
  * + core upgrade bonuses:
- *   - energy_regen: +1/sec per level
+ *   - energy_regen: +0.5/sec per level
  *   - kinetic_resonance: +50% per level (multiplicative)
  */
 export function getEnergyRegen(state: GameState): number {
-  let baseRegen = 5 + state.energyRegen;
+  let baseRegen = 1 + state.energyRegen;
 
-  // Apply energy_regen core upgrade
+  // Apply energy_regen core upgrade (+0.5/sec per level)
   const energyRegenUpgrade = state.coreUpgrades['energy_regen'] || 0;
-  baseRegen += energyRegenUpgrade;
+  baseRegen += energyRegenUpgrade * 0.5;
 
   // Apply kinetic_resonance multiplicative bonus
   const kineticResonance = state.coreUpgrades['kinetic_resonance'] || 0;

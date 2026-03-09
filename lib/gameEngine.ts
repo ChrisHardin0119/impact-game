@@ -347,11 +347,8 @@ export function activateOrbitalMechanic(omId: string, state: GameState): GameSta
       break;
 
     case 'gravity_well':
-      // Spawn 3 comets
-      for (let i = 0; i < 3; i++) {
-        const { state: stateAfterComet } = spawnComet(newState);
-        newState = stateAfterComet;
-      }
+      // Instantly gain +15 gravity
+      newState.gravity = Math.min(300, newState.gravity + 15);
       break;
 
     case 'singularity_pull':
