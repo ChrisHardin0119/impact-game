@@ -1,9 +1,9 @@
 'use client';
 
 import { useState, useRef, useCallback, useEffect } from 'react';
-import { GameState, TabName, BuyMode, FloatingNumber, Toast } from '@/lib/types';
+import { GameState, TabName, BuyMode, FloatingNumber } from '@/lib/types';
 import { defaultGameState } from '@/lib/prestige';
-import { processClick, buyProcess, activateOrbitalMechanic } from '@/lib/gameEngine';
+import { processClick, buyProcess, activateOrbitalMechanic, getMassPerSecond } from '@/lib/gameEngine';
 import { getProcessCost, getMaxAffordable, PROCESSES } from '@/lib/processes';
 import { ORBITAL_MECHANICS, getUnlockedOM } from '@/lib/orbitalMechanics';
 import { CORE_UPGRADES, canPurchaseUpgrade, getUpgradeCost } from '@/lib/upgrades';
@@ -14,16 +14,29 @@ import { getGravityMultiplier, getDensityMultiplier } from '@/lib/resources';
 import { fmt, fmtPct, fmtTime } from '@/lib/format';
 import { saveGame, loadGame, calculateOfflineGains, hardReset, exportSave, importSave } from '@/lib/saveLoad';
 import { useGameLoop } from '@/hooks/useGameLoop';
+import SwipeableNotification, { NotificationData, NotificationType } from '@/components/SwipeableNotification';
+import TutorialOverlay, { ContextualHint } from '@/components/TutorialOverlay';
+import { WALKTHROUGH_STEPS, checkContextualHints, TutorialStep } from '@/lib/tutorial';
+import BoostBar from '@/components/BoostBar';
+import AdModal from '@/components/AdModal';
+import { BoostType, applyBoost } from '@/lib/boosts';
+import FeedbackButton from '@/components/FeedbackButton';
+import FeedbackForm from '@/components/FeedbackForm';
 
 export default function GamePage() {
   const [state, setStateRaw] = useState<GameState>(defaultGameState());
   const stateRef = useRef(state);
   const [floatingNums, setFloatingNums] = useState<FloatingNumber[]>([]);
-  const [toasts, setToasts] = useState<Toast[]>([]);
+  const [toasts, setToasts] = useState<NotificationData[]>([]);
   const [loaded, setLoaded] = useState(false);
   const [offlineGains, setOfflineGains] = useState<{mass: number, time: number} | null>(null);
   const nextFloatId = useRef(0);
   const nextToastId = useRef(0);
+  const [tutorialStep, setTutorialStep] = useState(-1); // -1 = not showing walkthrough
+  const [contextualHint, setContextualHint] = useState<TutorialStep | null>(null);
+  const lastHintCheckRef = useRef(0);
+  const [pendingBoost, setPendingBoost] = useState<BoostType | null>(null);
+  const [showFeedback, setShowFeedback] = useState(false);
 
   const setState = useCallback((s: GameState) => {
     stateRef.current = s;
@@ -40,6 +53,9 @@ export default function GamePage() {
         setOfflineGains({ mass: offlineMass, time: offlineTime });
       }
       setState(restored);
+    } else {
+      // New player — start walkthrough tutorial
+      setTutorialStep(0);
     }
     setLoaded(true);
   }, [setState]);
@@ -47,12 +63,93 @@ export default function GamePage() {
   // Game loop
   useGameLoop(stateRef, setState);
 
-  const addToast = useCallback((message: string, emoji: string = '✨') => {
+  // Check contextual hints periodically
+  useEffect(() => {
+    if (!loaded || tutorialStep >= 0) return; // Don't show hints during walkthrough
+    const interval = setInterval(() => {
+      const s = stateRef.current;
+      if (s.tutorialSkipped && s.tutorialCompleted.length === 0) return;
+      const hints = checkContextualHints(s);
+      if (hints.length > 0 && !contextualHint) {
+        setContextualHint(hints[0]);
+      }
+    }, 5000);
+    return () => clearInterval(interval);
+  }, [loaded, tutorialStep, contextualHint]);
+
+  const addToast = useCallback((message: string, emoji: string = '✨', type: NotificationType = 'toast') => {
     const id = nextToastId.current++;
-    setToasts(prev => [...prev, { id, message, emoji, timeLeft: 3 }]);
-    setTimeout(() => {
-      setToasts(prev => prev.filter(t => t.id !== id));
-    }, 3000);
+    setToasts(prev => [...prev, { id, message, emoji, type }]);
+  }, []);
+
+  const dismissToast = useCallback((id: number) => {
+    setToasts(prev => prev.filter(t => t.id !== id));
+  }, []);
+
+  // Tutorial handlers
+  const handleTutorialNext = useCallback(() => {
+    const nextStep = tutorialStep + 1;
+    const currentStepDef = WALKTHROUGH_STEPS[tutorialStep];
+    if (currentStepDef) {
+      const s = stateRef.current;
+      setState({
+        ...s,
+        tutorialCompleted: [...s.tutorialCompleted, currentStepDef.id],
+      });
+    }
+    if (nextStep >= WALKTHROUGH_STEPS.length) {
+      setTutorialStep(-1); // Done
+    } else {
+      setTutorialStep(nextStep);
+    }
+  }, [tutorialStep, setState]);
+
+  const handleTutorialSkip = useCallback(() => {
+    setTutorialStep(-1);
+    const s = stateRef.current;
+    setState({ ...s, tutorialSkipped: true });
+  }, [setState]);
+
+  const handleDismissHint = useCallback(() => {
+    if (contextualHint) {
+      const s = stateRef.current;
+      setState({
+        ...s,
+        tutorialCompleted: [...s.tutorialCompleted, contextualHint.id],
+      });
+      setContextualHint(null);
+    }
+  }, [contextualHint, setState]);
+
+  // Boost handlers
+  const handleActivateBoost = useCallback((type: BoostType) => {
+    const s = stateRef.current;
+    if (s.adsRemoved) {
+      // Free boost — apply directly
+      const result = applyBoost(type, s);
+      if (result) {
+        setState(result);
+        addToast(`Boost activated!`, '⚡', 'reward');
+      }
+    } else {
+      // Show ad modal first
+      setPendingBoost(type);
+    }
+  }, [setState, addToast]);
+
+  const handleAdComplete = useCallback(() => {
+    if (pendingBoost) {
+      const result = applyBoost(pendingBoost, stateRef.current);
+      if (result) {
+        setState(result);
+        addToast(`Boost activated!`, '⚡', 'reward');
+      }
+      setPendingBoost(null);
+    }
+  }, [pendingBoost, setState, addToast]);
+
+  const handleAdCancel = useCallback(() => {
+    setPendingBoost(null);
   }, []);
 
   // Click handler
@@ -132,8 +229,20 @@ export default function GamePage() {
   const handlePrestige = useCallback(() => {
     const s = stateRef.current;
     if (!canPrestige(s)) return;
-    const shardsEarned = calcShards(s.runMassEarned, s.currentTier);
+    let shardMult = 1;
+    // Apply prestige double boost if active
+    if (s.boosts.prestigeDouble.active && !s.boosts.prestigeDouble.usedThisRun) {
+      shardMult = 2;
+    }
+    const shardsEarned = calcShards(s.runMassEarned, s.currentTier, shardMult);
     let newState = getPrestigeResetState(s);
+    // Mark prestige double as used
+    if (shardMult === 2) {
+      newState.boosts = {
+        ...newState.boosts,
+        prestigeDouble: { active: false, usedThisRun: true },
+      };
+    }
     newState.currentShards += shardsEarned;
     newState.lifetimeShards += shardsEarned;
     // Check tier upgrades
@@ -143,7 +252,8 @@ export default function GamePage() {
       }
     }
     setState(newState);
-    addToast(`Prestige! +${fmt(shardsEarned)} shards`, '💎');
+    const doubleText = shardMult === 2 ? ' (2x bonus!)' : '';
+    addToast(`Prestige! +${fmt(shardsEarned)} shards${doubleText}`, '💎');
   }, [setState, addToast]);
 
   // Choose composition
@@ -179,6 +289,7 @@ export default function GamePage() {
   // Calculate display values
   const gravMult = getGravityMultiplier(state.gravity);
   const densMult = getDensityMultiplier(state.density);
+  const massPerSec = getMassPerSecond(state);
   const shardsOnPrestige = canPrestige(state) ? calcShards(state.runMassEarned, state.currentTier) : 0;
   const currentTierDef = PRESTIGE_TIERS[state.currentTier];
   const nextTierDef = state.currentTier < 5 ? PRESTIGE_TIERS[state.currentTier + 1] : null;
@@ -186,23 +297,24 @@ export default function GamePage() {
   const unlockedOM = getUnlockedOM(state.currentTier);
 
   return (
-    <div className="scanlines flex flex-col h-screen max-h-screen">
+    <div className="scanlines flex flex-col h-screen max-h-screen no-select safe-top">
       {/* Resource Header */}
-      <div className="bg-space-light border-b border-gray-700 px-4 py-2">
+      <div className="bg-space-light border-b border-gray-700 px-2 sm:px-4 py-1.5 sm:py-2 safe-x">
         <div className="flex items-center justify-between mb-1">
-          <div className="flex items-center gap-4">
-            <span className="glow-cyan font-bold text-lg">{currentTierDef.emoji} {currentTierDef.name}</span>
-            {state.composition && <span className="text-sm text-gray-400">| {COMPOSITIONS.find(c => c.id === state.composition)?.name}</span>}
+          <div className="flex items-center gap-2 sm:gap-4 min-w-0">
+            <span className="glow-cyan font-bold text-sm sm:text-lg truncate">{currentTierDef.emoji} {currentTierDef.name}</span>
+            {state.composition && <span className="text-xs sm:text-sm text-gray-400 truncate">| {COMPOSITIONS.find(c => c.id === state.composition)?.name}</span>}
           </div>
-          <div className="flex gap-2">
-            <button className="btn-secondary text-xs" onClick={() => saveGame(state)}>Save</button>
-            <button className="btn-secondary text-xs" onClick={() => setTab('stats')}>⚙</button>
+          <div className="flex gap-1.5 sm:gap-2 shrink-0">
+            <button className="btn-secondary text-xs px-2 py-1" onClick={() => saveGame(state)}>Save</button>
+            <button className="btn-secondary text-xs px-2 py-1" onClick={() => setTab('stats')}>⚙</button>
           </div>
         </div>
-        <div className="grid grid-cols-4 gap-3">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-3">
           {/* Mass */}
           <div>
             <div className="text-xs text-gray-400 flex justify-between"><span>Mass</span><span className="glow-cyan">{fmt(state.mass)}</span></div>
+            {massPerSec > 0 && <div className="mass-per-sec">+{fmt(massPerSec)}/s</div>}
           </div>
           {/* Gravity */}
           <div>
@@ -230,17 +342,20 @@ export default function GamePage() {
         </div>
       </div>
 
+      {/* Boost Bar */}
+      <BoostBar state={state} onActivateBoost={handleActivateBoost} />
+
       {/* Tab Navigation */}
-      <div className="flex border-b border-gray-700 bg-space-light px-2">
+      <div className="tab-bar border-b border-gray-700 bg-space-light px-2 safe-x">
         {tabs.map(t => (
-          <button key={t.id} className={`tab ${activeTab === t.id ? 'tab-active' : ''}`} onClick={() => setTab(t.id)}>
+          <button key={t.id} className={`tab whitespace-nowrap ${activeTab === t.id ? 'tab-active' : ''}`} onClick={() => setTab(t.id)}>
             <span className="mr-1">{t.icon}</span>{t.label}
           </button>
         ))}
       </div>
 
       {/* Content Area */}
-      <div className="flex-1 overflow-y-auto px-4 py-3">
+      <div className="flex-1 overflow-y-auto px-2 sm:px-4 py-3 safe-bottom safe-x">
         {/* Composition Picker (shown if no composition selected) */}
         {!state.composition && activeTab === 'build' && (
           <div className="mb-4">
@@ -475,30 +590,76 @@ export default function GamePage() {
                 }
               }}>Hard Reset</button>
             </div>
+            <h3 className="text-sm font-bold text-gray-400 mb-2 mt-4">Feedback</h3>
+            <div className="card">
+              <FeedbackForm
+                state={state}
+                inline={true}
+                onSubmit={(success) => {
+                  if (success) addToast('Feedback sent! Thanks!', '💬');
+                  else addToast('Failed to send feedback', '❌');
+                }}
+              />
+            </div>
           </div>
         )}
       </div>
 
       {/* Toast notifications */}
-      <div className="fixed top-4 right-4 z-50 space-y-2">
+      <div className="fixed top-2 right-2 sm:top-4 sm:right-4 z-50 space-y-2 max-w-[90vw]">
         {toasts.map(t => (
-          <div key={t.id} className="toast-enter bg-space-lighter border border-gray-700 rounded px-3 py-2 text-sm flex items-center gap-2">
-            <span>{t.emoji}</span>
-            <span>{t.message}</span>
-          </div>
+          <SwipeableNotification key={t.id} notification={t} onDismiss={dismissToast} />
         ))}
       </div>
 
       {/* Offline gains modal */}
       {offlineGains && (
-        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50">
-          <div className="card max-w-sm text-center">
+        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 px-4">
+          <div className="card max-w-sm w-full text-center mx-4">
             <h2 className="glow-cyan text-lg mb-2">Welcome Back!</h2>
             <div className="text-sm text-gray-400 mb-1">You were away for {fmtTime(offlineGains.time)}</div>
             <div className="text-lg text-neon font-bold">+{fmt(offlineGains.mass)} mass</div>
             <button className="btn-primary mt-4" onClick={() => setOfflineGains(null)}>Continue</button>
           </div>
         </div>
+      )}
+
+      {/* Floating Feedback Button */}
+      <FeedbackButton onClick={() => setShowFeedback(true)} />
+
+      {/* Feedback Modal */}
+      {showFeedback && (
+        <FeedbackForm
+          state={state}
+          onClose={() => setShowFeedback(false)}
+          onSubmit={(success) => {
+            if (success) {
+              addToast('Feedback sent! Thanks!', '💬');
+              setShowFeedback(false);
+            } else {
+              addToast('Failed to send feedback', '❌');
+            }
+          }}
+        />
+      )}
+
+      {/* Ad Modal */}
+      {pendingBoost && (
+        <AdModal boostType={pendingBoost} onComplete={handleAdComplete} onCancel={handleAdCancel} />
+      )}
+
+      {/* Tutorial walkthrough overlay */}
+      {tutorialStep >= 0 && (
+        <TutorialOverlay
+          currentStep={tutorialStep}
+          onNext={handleTutorialNext}
+          onSkip={handleTutorialSkip}
+        />
+      )}
+
+      {/* Contextual hint */}
+      {contextualHint && tutorialStep < 0 && (
+        <ContextualHint step={contextualHint} onDismiss={handleDismissHint} />
       )}
     </div>
   );

@@ -1,4 +1,4 @@
-import type { Metadata } from 'next';
+import type { Metadata, Viewport } from 'next';
 import './globals.css';
 
 export const metadata: Metadata = {
@@ -6,10 +6,18 @@ export const metadata: Metadata = {
   description: 'Build your asteroid from a rock to a black hole.',
 };
 
+export const viewport: Viewport = {
+  width: 'device-width',
+  initialScale: 1,
+  maximumScale: 1,
+  userScalable: false,
+  viewportFit: 'cover',
+};
+
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en">
-      <body className="bg-space text-white min-h-screen overflow-hidden">
+      <body className="bg-space text-white min-h-screen overflow-hidden overscroll-none">
         {children}
       </body>
     </html>

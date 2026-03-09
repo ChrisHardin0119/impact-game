@@ -146,6 +146,18 @@ export interface GameState {
   activeTab: TabName;
   buyMode: BuyMode;
 
+  // Tutorial
+  tutorialCompleted: string[]; // IDs of completed tutorial steps
+  tutorialSkipped: boolean;
+
+  // Ads & Boosts
+  adsRemoved: boolean;
+  boosts: {
+    productionBoost: { active: boolean; endsAt: number };   // 2x production for 30 min
+    prestigeDouble: { active: boolean; usedThisRun: boolean }; // 2x shards next prestige
+    massDrop: { lastUsed: number };  // timestamp of last use
+  };
+
   // Meta
   lastSaveTime: number;
   version: number;

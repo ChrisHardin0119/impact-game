@@ -143,6 +143,18 @@ export function getPrestigeResetState(state: GameState): GameState {
     chargedProcess: null,
     chargeCooldown: 0,
 
+    // Tutorial persists
+    tutorialCompleted: [...state.tutorialCompleted],
+    tutorialSkipped: state.tutorialSkipped,
+
+    // Ads & Boosts persist (but prestige double may be consumed)
+    adsRemoved: state.adsRemoved,
+    boosts: {
+      productionBoost: { active: false, endsAt: 0 },
+      prestigeDouble: { active: false, usedThisRun: false },
+      massDrop: { lastUsed: 0 },
+    },
+
     // UI
     activeTab: 'build',
     buyMode: 1,
@@ -237,6 +249,18 @@ export function defaultGameState(): GameState {
     // Charged buildings
     chargedProcess: null,
     chargeCooldown: 0,
+
+    // Tutorial
+    tutorialCompleted: [],
+    tutorialSkipped: false,
+
+    // Ads & Boosts
+    adsRemoved: false,
+    boosts: {
+      productionBoost: { active: false, endsAt: 0 },
+      prestigeDouble: { active: false, usedThisRun: false },
+      massDrop: { lastUsed: 0 },
+    },
 
     // UI
     activeTab: 'build',
