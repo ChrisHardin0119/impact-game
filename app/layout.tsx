@@ -17,7 +17,7 @@ export const viewport: Viewport = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en">
-      <body className="bg-space text-white min-h-screen overflow-hidden overscroll-none">
+      <body className="bg-space text-white overflow-hidden overscroll-none" style={{height: '100dvh'}}>
         {children}
       </body>
     </html>
