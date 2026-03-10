@@ -1,0 +1,22 @@
+On branch main
+Your branch is up to date with 'origin/main'.
+
+Changes to be committed:
+  (use "git restore --staged <file>..." to unstage)
+	modified:   app/page.tsx
+	modified:   deploy.bat
+	new file:   run.bat
+	new file:   status.txt
+
+Untracked files:
+  (use "git add <file>..." to include in what will be committed)
+	gitlog.txt
+
+[main ced124c] v12.1: Fix tutorial text, force redeploy
+ 4 files changed, 10 insertions(+), 3 deletions(-)
+ create mode 100644 run.bat
+ create mode 100644 status.txt
+/"C:/Program Files/GitHub CLI/gh.exe" auth git-credential store: line 1: /C:/Program Files/GitHub CLI/gh.exe: No such file or directory
+To https://github.com/ChrisHardin0119/impact-game.git
+   0d27af0..ced124c  main -> main
+DONE 
