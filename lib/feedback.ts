@@ -56,8 +56,8 @@ export interface FeedbackPayload {
  *
  * ============================================================
  */
-const SUPABASE_URL = ''; // e.g., 'https://abc123.supabase.co'
-const SUPABASE_ANON_KEY = ''; // e.g., 'eyJ...'
+const SUPABASE_URL = 'https://pqhregrssizxvgbfnqqz.supabase.co';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBxaHJlZ3Jzc2l6eHZnYmZucXF6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzMxMTY0MTIsImV4cCI6MjA4ODY5MjQxMn0.qRxt-nfV2uAPXtGqFKJrhCpSnrGyMP4kyHSfk6sDtAI';
 
 /**
  * Build a game snapshot for feedback context

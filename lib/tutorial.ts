@@ -54,7 +54,7 @@ export const WALKTHROUGH_STEPS: TutorialStep[] = [
   {
     id: 'click_intro',
     title: 'Click to Mine',
-    message: 'Click the asteroid to earn mass! Each click grows stronger as you progress. Try clicking a few times now.',
+    message: 'Click the asteroid to earn mass! Each click grows stronger as you progress. You\'ll try it once we finish the tutorial.',
     emoji: '👆',
     phase: 'walkthrough',
     order: 4,

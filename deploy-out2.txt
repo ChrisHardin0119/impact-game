@@ -1,0 +1,99 @@
+warning: in the working copy of 'app/page.tsx', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'deploy-error.txt', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'deploy-output.txt', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'hooks/useGameLoop.ts', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'lib/discoveries.ts', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'lib/feedback.ts', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'lib/gameEngine.ts', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'lib/orbitalMechanics.ts', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'lib/prestige.ts', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'lib/resources.ts', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'lib/saveLoad.ts', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'lib/types.ts', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'push-v12.bat', LF will be replaced by CRLF the next time Git touches it
+On branch main
+Your branch is up to date with 'origin/main'.
+
+Changes to be committed:
+  (use "git restore --staged <file>..." to unstage)
+	deleted:    app/app/globals.css
+	deleted:    app/app/layout.tsx
+	deleted:    app/app/page.tsx
+	modified:   app/page.tsx
+	deleted:    components/components/AdModal.tsx
+	deleted:    components/components/BoostBar.tsx
+	deleted:    components/components/FeedbackButton.tsx
+	deleted:    components/components/FeedbackForm.tsx
+	deleted:    components/components/SwipeableNotification.tsx
+	deleted:    components/components/TutorialOverlay.tsx
+	modified:   deploy-error.txt
+	new file:   deploy-out2.txt
+	modified:   deploy-output.txt
+	deleted:    hooks/hooks/useGameLoop.ts
+	deleted:    hooks/hooks/useSwipeGesture.ts
+	modified:   hooks/useGameLoop.ts
+	modified:   lib/discoveries.ts
+	modified:   lib/feedback.ts
+	modified:   lib/gameEngine.ts
+	deleted:    lib/lib/adMobBridge.ts
+	deleted:    lib/lib/boosts.ts
+	deleted:    lib/lib/compositions.ts
+	deleted:    lib/lib/discoveries.ts
+	deleted:    lib/lib/feedback.ts
+	deleted:    lib/lib/format.ts
+	deleted:    lib/lib/gameEngine.ts
+	deleted:    lib/lib/iapBridge.ts
+	deleted:    lib/lib/orbitalMechanics.ts
+	deleted:    lib/lib/prestige.ts
+	deleted:    lib/lib/processes.ts
+	deleted:    lib/lib/resources.ts
+	deleted:    lib/lib/saveLoad.ts
+	deleted:    lib/lib/tutorial.ts
+	deleted:    lib/lib/types.ts
+	deleted:    lib/lib/upgrades.ts
+	modified:   lib/orbitalMechanics.ts
+	modified:   lib/prestige.ts
+	modified:   lib/resources.ts
+	modified:   lib/saveLoad.ts
+	modified:   lib/types.ts
+	new file:   push-v12.bat
+
+Changes not staged for commit:
+  (use "git add <file>..." to update what will be committed)
+  (use "git restore <file>..." to discard changes in working directory)
+	modified:   deploy-out2.txt
+
+[main 94753d1] v12: Energy rebalance, 29 achievements, gravity/density UI, Supabase feedback ready
+ 41 files changed, 848 insertions(+), 4631 deletions(-)
+ delete mode 100644 app/app/globals.css
+ delete mode 100644 app/app/layout.tsx
+ delete mode 100644 app/app/page.tsx
+ delete mode 100644 components/components/AdModal.tsx
+ delete mode 100644 components/components/BoostBar.tsx
+ delete mode 100644 components/components/FeedbackButton.tsx
+ delete mode 100644 components/components/FeedbackForm.tsx
+ delete mode 100644 components/components/SwipeableNotification.tsx
+ delete mode 100644 components/components/TutorialOverlay.tsx
+ create mode 100644 deploy-out2.txt
+ delete mode 100644 hooks/hooks/useGameLoop.ts
+ delete mode 100644 hooks/hooks/useSwipeGesture.ts
+ delete mode 100644 lib/lib/adMobBridge.ts
+ delete mode 100644 lib/lib/boosts.ts
+ delete mode 100644 lib/lib/compositions.ts
+ delete mode 100644 lib/lib/discoveries.ts
+ delete mode 100644 lib/lib/feedback.ts
+ delete mode 100644 lib/lib/format.ts
+ delete mode 100644 lib/lib/gameEngine.ts
+ delete mode 100644 lib/lib/iapBridge.ts
+ delete mode 100644 lib/lib/orbitalMechanics.ts
+ delete mode 100644 lib/lib/prestige.ts
+ delete mode 100644 lib/lib/processes.ts
+ delete mode 100644 lib/lib/resources.ts
+ delete mode 100644 lib/lib/saveLoad.ts
+ delete mode 100644 lib/lib/tutorial.ts
+ delete mode 100644 lib/lib/types.ts
+ delete mode 100644 lib/lib/upgrades.ts
+ create mode 100644 push-v12.bat
+/"C:/Program Files/GitHub CLI/gh.exe" auth git-credential store: line 1: /C:/Program Files/GitHub CLI/gh.exe: No such file or directory
+To https://github.com/ChrisHardin0119/impact-game.git
+   1474329..94753d1  main -> main
