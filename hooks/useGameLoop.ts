@@ -7,6 +7,7 @@ import { saveGame } from '@/lib/saveLoad';
 import { checkDiscoveries } from '@/lib/discoveries';
 
 const AUTO_SAVE_INTERVAL = 30; // seconds
+const DISCOVERY_CHECK_INTERVAL = 2; // seconds (check achievements frequently)
 
 export function useGameLoop(
   stateRef: React.MutableRefObject<GameState>,
@@ -14,6 +15,7 @@ export function useGameLoop(
 ) {
   const lastTimeRef = useRef<number>(0);
   const autoSaveTimerRef = useRef<number>(0);
+  const discoveryTimerRef = useRef<number>(0);
   const rafRef = useRef<number>(0);
 
   const tick = useCallback((timestamp: number) => {
@@ -27,11 +29,10 @@ export function useGameLoop(
     if (dt > 0) {
       let newState = processTick(stateRef.current, dt);
 
-      // Check discoveries periodically (not every frame for perf)
-      autoSaveTimerRef.current += dt;
-      if (autoSaveTimerRef.current >= AUTO_SAVE_INTERVAL) {
-        autoSaveTimerRef.current = 0;
-        // Check discoveries
+      // Check discoveries every 2 seconds (lightweight check)
+      discoveryTimerRef.current += dt;
+      if (discoveryTimerRef.current >= DISCOVERY_CHECK_INTERVAL) {
+        discoveryTimerRef.current = 0;
         const newDiscoveries = checkDiscoveries(newState);
         if (newDiscoveries.length > 0) {
           newState = {
@@ -39,7 +40,12 @@ export function useGameLoop(
             discoveries: [...newState.discoveries, ...newDiscoveries],
           };
         }
-        // Auto-save
+      }
+
+      // Auto-save every 30 seconds
+      autoSaveTimerRef.current += dt;
+      if (autoSaveTimerRef.current >= AUTO_SAVE_INTERVAL) {
+        autoSaveTimerRef.current = 0;
         saveGame(newState);
       }
 

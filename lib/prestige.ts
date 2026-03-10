@@ -49,10 +49,17 @@ export const PRESTIGE_TIERS: PrestigeTierDef[] = [
  * Calculate shards earned from a prestige run
  * Formula: floor(sqrt(massEarned / 1e6)) * (1 + tier * 0.3) * shardBoostMultiplier
  */
-export function calcShards(massEarned: number, tier: PrestigeTier, shardBoostMultiplier: number = 1): number {
+export function calcShards(massEarned: number, tier: PrestigeTier, shardBoostMultiplier: number = 1, discoveries: string[] = []): number {
   const baseShards = Math.floor(Math.sqrt(massEarned / 1000000));
   const tierBonus = 1 + tier * 0.3;
-  return Math.floor(baseShards * tierBonus * shardBoostMultiplier);
+
+  // Apply discovery shard bonuses
+  let discoveryMult = 1;
+  if (discoveries.includes('first_prestige')) discoveryMult += 0.05;
+  if (discoveries.includes('prestige_veteran')) discoveryMult += 0.15;
+  if (discoveries.includes('silent_giant')) discoveryMult += 0.10;
+
+  return Math.floor(baseShards * tierBonus * shardBoostMultiplier * discoveryMult);
 }
 
 /**
@@ -155,6 +162,13 @@ export function getPrestigeResetState(state: GameState): GameState {
       prestigeDouble: { active: false, usedThisRun: false },
       massDrop: { lastUsed: 0 },
     },
+
+    // Achievement tracking (persist across prestige)
+    soundToggles: state.soundToggles || 0,
+    omUsedThisRun: false, // reset per run
+    fastestPrestige: state.fastestPrestige || Infinity,
+    totalOrbitalToggles: state.totalOrbitalToggles || 0,
+    maxComboReached: state.maxComboReached || 0,
 
     // UI
     activeTab: 'build',
@@ -263,6 +277,13 @@ export function defaultGameState(): GameState {
       prestigeDouble: { active: false, usedThisRun: false },
       massDrop: { lastUsed: 0 },
     },
+
+    // Achievement tracking
+    soundToggles: 0,
+    omUsedThisRun: false,
+    fastestPrestige: Infinity,
+    totalOrbitalToggles: 0,
+    maxComboReached: 0,
 
     // UI
     activeTab: 'build',

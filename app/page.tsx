@@ -9,8 +9,8 @@ import { ORBITAL_MECHANICS, getUnlockedOM, getTotalEnergyDrain } from '@/lib/orb
 import { CORE_UPGRADES, canPurchaseUpgrade, getUpgradeCost } from '@/lib/upgrades';
 import { COMPOSITIONS, getUnlockedCompositions } from '@/lib/compositions';
 import { calcShards, canPrestige, getPrestigeResetState, PRESTIGE_TIERS } from '@/lib/prestige';
-import { DISCOVERIES } from '@/lib/discoveries';
-import { getGravityMultiplier, getDensityMultiplier, getEnergyRegen, getMaxEnergy } from '@/lib/resources';
+import { DISCOVERIES, checkDiscoveries, checkPrestigeDiscoveries } from '@/lib/discoveries';
+import { getGravityMultiplier, getDensityMultiplier, getGravityZone, getDensityZone, getEnergyRegen, getMaxEnergy } from '@/lib/resources';
 import { fmt, fmtPct, fmtTime } from '@/lib/format';
 import { saveGame, loadGame, calculateOfflineGains, hardReset, exportSave, importSave } from '@/lib/saveLoad';
 import { useGameLoop } from '@/hooks/useGameLoop';
@@ -180,6 +180,10 @@ export default function GamePage() {
     const comboMult = 1 + (Math.min(clickCombo, 20) / 20) * 4;
     const newState = processClick(stateRef.current, comboMult);
     const clickValue = newState.mass - stateRef.current.mass;
+    // Track max combo for achievements
+    if (clickCombo > (newState.maxComboReached || 0)) {
+      newState.maxComboReached = clickCombo;
+    }
     setState(newState);
     const id = nextFloatId.current++;
     const rect = e.currentTarget.getBoundingClientRect();
@@ -252,6 +256,11 @@ export default function GamePage() {
     const currentState = stateRef.current;
     const result = activateOrbitalMechanic(omId, currentState);
     if (result) {
+      // Track OM usage for achievements
+      result.omUsedThisRun = true;
+      if (omDef.isToggle) {
+        result.totalOrbitalToggles = (result.totalOrbitalToggles || 0) + 1;
+      }
       setState(result);
       if (omDef.isToggle) {
         const wasOn = currentState.omToggles?.[omId] || false;
@@ -281,12 +290,29 @@ export default function GamePage() {
   const handlePrestige = useCallback(() => {
     const s = stateRef.current;
     if (!canPrestige(s)) return;
+
+    // Check prestige-time discoveries BEFORE reset
+    const prestigeDiscoveries = checkPrestigeDiscoveries(s);
+    let updatedState = { ...s };
+    if (prestigeDiscoveries.length > 0) {
+      updatedState.discoveries = [...updatedState.discoveries, ...prestigeDiscoveries];
+      for (const dId of prestigeDiscoveries) {
+        const d = DISCOVERIES.find(dd => dd.id === dId);
+        if (d) addToast(`${d.hidden ? '🔒 Secret: ' : ''}${d.name}!`, d.emoji, 'reward');
+      }
+    }
+
+    // Track fastest prestige
+    if (s.runTime > 0 && s.runTime < (updatedState.fastestPrestige || Infinity)) {
+      updatedState.fastestPrestige = s.runTime;
+    }
+
     let shardMult = 1;
-    if (s.boosts.prestigeDouble.active && !s.boosts.prestigeDouble.usedThisRun) {
+    if (updatedState.boosts.prestigeDouble.active && !updatedState.boosts.prestigeDouble.usedThisRun) {
       shardMult = 2;
     }
-    const shardsEarned = calcShards(s.runMassEarned, s.currentTier, shardMult);
-    let newState = getPrestigeResetState(s);
+    const shardsEarned = calcShards(updatedState.runMassEarned, updatedState.currentTier, shardMult, updatedState.discoveries);
+    let newState = getPrestigeResetState(updatedState);
     if (shardMult === 2) {
       newState.boosts = {
         ...newState.boosts,
@@ -295,7 +321,7 @@ export default function GamePage() {
     }
     newState.currentShards += shardsEarned;
     newState.lifetimeShards += shardsEarned;
-    for (let i = s.currentTier + 1; i <= 5; i++) {
+    for (let i = updatedState.currentTier + 1; i <= 5; i++) {
       if (newState.lifetimeShards >= PRESTIGE_TIERS[i].shardReq) {
         newState.currentTier = i as any;
       }
@@ -338,6 +364,8 @@ export default function GamePage() {
   // Calculate display values
   const gravMult = getGravityMultiplier(state.gravity);
   const densMult = getDensityMultiplier(state.density);
+  const gravZone = getGravityZone(state.gravity);
+  const densZone = getDensityZone(state.density);
   const massPerSec = getMassPerSecond(state);
   const shardsOnPrestige = canPrestige(state) ? calcShards(state.runMassEarned, state.currentTier) : 0;
   const currentTierDef = PRESTIGE_TIERS[state.currentTier];
@@ -357,7 +385,7 @@ export default function GamePage() {
           <div className="flex gap-2 shrink-0 items-center">
             <button className="btn-secondary text-sm px-2.5 py-1" onClick={() => saveGame(state)}>Save</button>
             <button className="btn-secondary text-sm px-2.5 py-1" onClick={() => setTab('stats')}>⚙</button>
-            <span className="text-xs text-gray-600">v10</span>
+            <span className="text-xs text-gray-600">v12</span>
           </div>
         </div>
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-x-4 gap-y-2 sm:gap-3">
@@ -371,24 +399,31 @@ export default function GamePage() {
           <div>
             <div className="text-sm text-gray-400">Gravity <span className="text-white">{fmt(state.gravity, 0)}/300</span></div>
             <div className="resource-bar mt-1">
-              <div className="resource-bar-fill" style={{width: `${(state.gravity / 300) * 100}%`, background: gravMult >= 1 ? 'var(--color-green)' : 'var(--color-red)'}} />
+              <div className="resource-bar-fill" style={{width: `${(state.gravity / 300) * 100}%`, background: gravZone.color}} />
             </div>
-            <div className="text-sm font-bold mt-0.5" style={{color: gravMult >= 1 ? 'var(--color-green)' : 'var(--color-red)'}}>{gravMult.toFixed(2)}x</div>
+            <div className="flex items-center gap-1.5 mt-0.5">
+              <span className="text-sm font-bold" style={{color: gravZone.color}}>{gravZone.label}</span>
+              <span className="text-sm font-bold" style={{color: gravMult >= 1 ? 'var(--color-green)' : 'var(--color-red)'}}>{gravMult.toFixed(2)}x prod</span>
+            </div>
           </div>
           {/* Density */}
           <div>
             <div className="text-sm text-gray-400">Density <span className="text-white">{state.density.toFixed(1)}%</span></div>
             <div className="resource-bar mt-1">
-              <div className="resource-bar-fill" style={{width: `${state.density}%`, background: densMult >= 1 ? 'var(--color-purple)' : 'var(--color-red)'}} />
+              <div className="resource-bar-fill" style={{width: `${state.density}%`, background: densZone.color}} />
             </div>
-            <div className="text-sm font-bold mt-0.5" style={{color: densMult >= 1 ? 'var(--color-purple)' : 'var(--color-red)'}}>{densMult.toFixed(2)}x</div>
+            <div className="flex items-center gap-1.5 mt-0.5">
+              <span className="text-sm font-bold" style={{color: densZone.color}}>{densZone.label}</span>
+              <span className="text-sm font-bold" style={{color: densMult >= 1 ? 'var(--color-purple)' : 'var(--color-red)'}}>{densMult.toFixed(2)}x prod</span>
+            </div>
           </div>
           {/* Energy */}
           <div>
-            <div className="text-sm text-gray-400">Energy <span className="text-white">{Math.floor(state.energy)}/{state.maxEnergy}</span></div>
+            <div className="text-sm text-gray-400">Energy <span className="text-white">{Math.floor(state.energy)}/{getMaxEnergy(state)}</span></div>
             <div className="resource-bar mt-1">
-              <div className="resource-bar-fill" style={{width: `${(state.energy / state.maxEnergy) * 100}%`, background: 'var(--color-orange)'}} />
+              <div className="resource-bar-fill" style={{width: `${(state.energy / getMaxEnergy(state)) * 100}%`, background: 'var(--color-orange)'}} />
             </div>
+            <div className="text-sm text-orange mt-0.5">+{getEnergyRegen(state).toFixed(1)}/s</div>
           </div>
         </div>
       </div>
@@ -704,8 +739,9 @@ export default function GamePage() {
           <div>
             <h2 className="glow-orange text-lg mb-3">Discoveries</h2>
             <div className="text-sm text-gray-400 mb-3">{state.discoveries.length}/{DISCOVERIES.length} discovered</div>
+            {/* Regular discoveries (non-hidden always show) */}
             <div className="space-y-2">
-              {DISCOVERIES.map(d => {
+              {DISCOVERIES.filter(d => !d.hidden).map(d => {
                 const found = state.discoveries.includes(d.id);
                 return (
                   <div key={d.id} className={`card ${found ? 'border-orange' : 'opacity-40'}`}>
@@ -713,7 +749,37 @@ export default function GamePage() {
                       <span className="text-base">{found ? d.emoji : '❓'}</span>
                       <span className="font-bold text-sm">{found ? d.name : '???'}</span>
                     </div>
-                    <div className="text-sm text-gray-400 mt-1">{found ? d.bonusDesc : d.hint}</div>
+                    <div className="text-sm text-gray-400 mt-1">{found ? d.desc : d.hint}</div>
+                    {found && <div className="text-sm text-orange mt-0.5">{d.bonusDesc}</div>}
+                  </div>
+                );
+              })}
+            </div>
+            {/* Hidden discoveries — only show found ones + count of remaining */}
+            <h3 className="text-sm font-bold text-gray-400 uppercase mt-4 mb-2 tracking-wider">Hidden Achievements</h3>
+            <div className="space-y-2">
+              {DISCOVERIES.filter(d => d.hidden).map(d => {
+                const found = state.discoveries.includes(d.id);
+                if (!found) {
+                  return (
+                    <div key={d.id} className="card opacity-30">
+                      <div className="flex items-center gap-2">
+                        <span className="text-base">🔒</span>
+                        <span className="font-bold text-sm">???</span>
+                      </div>
+                      <div className="text-sm text-gray-400 mt-1">Do something unexpected...</div>
+                    </div>
+                  );
+                }
+                return (
+                  <div key={d.id} className="card border-purple">
+                    <div className="flex items-center gap-2">
+                      <span className="text-base">{d.emoji}</span>
+                      <span className="font-bold text-sm">{d.name}</span>
+                      <span className="text-xs text-purple">SECRET</span>
+                    </div>
+                    <div className="text-sm text-gray-400 mt-1">{d.desc}</div>
+                    <div className="text-sm text-purple mt-0.5">{d.bonusDesc}</div>
                   </div>
                 );
               })}

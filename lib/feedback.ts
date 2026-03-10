@@ -17,6 +17,49 @@ export interface FeedbackPayload {
 }
 
 /**
+ * ============================================================
+ * SUPABASE CONFIGURATION
+ * ============================================================
+ * Replace these with your actual Supabase project values.
+ *
+ * 1. Go to your Supabase project dashboard
+ * 2. Go to Settings > API
+ * 3. Copy the "URL" and "anon/public" key
+ *
+ * Then in Supabase SQL Editor, create the feedback table:
+ *
+ *   CREATE TABLE feedback (
+ *     id BIGSERIAL PRIMARY KEY,
+ *     created_at TIMESTAMPTZ DEFAULT NOW(),
+ *     text TEXT NOT NULL,
+ *     rating INT CHECK (rating >= 1 AND rating <= 5),
+ *     category TEXT CHECK (category IN ('bug', 'suggestion', 'praise')),
+ *     tier INT,
+ *     composition TEXT,
+ *     mass FLOAT,
+ *     playtime FLOAT,
+ *     game_version INT
+ *   );
+ *
+ *   -- Enable Row Level Security but allow anonymous inserts
+ *   ALTER TABLE feedback ENABLE ROW LEVEL SECURITY;
+ *   CREATE POLICY "Allow anonymous inserts"
+ *     ON feedback FOR INSERT
+ *     TO anon
+ *     WITH CHECK (true);
+ *
+ *   -- Optional: allow yourself to read all feedback
+ *   CREATE POLICY "Allow authenticated reads"
+ *     ON feedback FOR SELECT
+ *     TO authenticated
+ *     USING (true);
+ *
+ * ============================================================
+ */
+const SUPABASE_URL = ''; // e.g., 'https://abc123.supabase.co'
+const SUPABASE_ANON_KEY = ''; // e.g., 'eyJ...'
+
+/**
  * Build a game snapshot for feedback context
  */
 export function buildGameSnapshot(state: GameState) {
@@ -30,27 +73,46 @@ export function buildGameSnapshot(state: GameState) {
 }
 
 /**
- * Submit feedback. Currently stores locally.
- * Can be updated to POST to a Google Form endpoint or API.
+ * Submit feedback to Supabase (or localStorage as fallback).
  */
 export async function submitFeedback(payload: FeedbackPayload): Promise<boolean> {
   try {
-    // Store feedback locally for now
+    // Always store locally as backup
     const existing = JSON.parse(localStorage.getItem('impact_feedback') || '[]');
     existing.push(payload);
     localStorage.setItem('impact_feedback', JSON.stringify(existing));
 
-    // TODO: When Google Form is set up, POST to the form endpoint:
-    // const formUrl = 'https://docs.google.com/forms/d/e/YOUR_FORM_ID/formResponse';
-    // const formData = new FormData();
-    // formData.append('entry.XXXXXXX', payload.text);
-    // formData.append('entry.XXXXXXX', String(payload.rating));
-    // formData.append('entry.XXXXXXX', payload.category);
-    // formData.append('entry.XXXXXXX', JSON.stringify(payload.gameSnapshot));
-    // await fetch(formUrl, { method: 'POST', body: formData, mode: 'no-cors' });
+    // If Supabase is configured, send to the database
+    if (SUPABASE_URL && SUPABASE_ANON_KEY) {
+      const response = await fetch(`${SUPABASE_URL}/rest/v1/feedback`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'apikey': SUPABASE_ANON_KEY,
+          'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
+          'Prefer': 'return=minimal',
+        },
+        body: JSON.stringify({
+          text: payload.text,
+          rating: payload.rating,
+          category: payload.category,
+          tier: payload.gameSnapshot?.tier ?? null,
+          composition: payload.gameSnapshot?.composition ?? null,
+          mass: payload.gameSnapshot?.mass ?? null,
+          playtime: payload.gameSnapshot?.playtime ?? null,
+          game_version: payload.gameSnapshot?.version ?? null,
+        }),
+      });
+
+      if (!response.ok) {
+        console.warn('Supabase feedback failed:', response.status, await response.text());
+        // Still return true since we saved locally
+      }
+    }
 
     return true;
-  } catch {
+  } catch (err) {
+    console.warn('Feedback submission error:', err);
     return false;
   }
 }

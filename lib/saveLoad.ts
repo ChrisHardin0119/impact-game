@@ -49,6 +49,12 @@ export function loadGame(): GameState | null {
       tutorialCompleted: parsed.tutorialCompleted || defaults.tutorialCompleted,
       tutorialSkipped: parsed.tutorialSkipped ?? defaults.tutorialSkipped,
       adsRemoved: parsed.adsRemoved ?? defaults.adsRemoved,
+      // Achievement tracking (added in v12)
+      soundToggles: parsed.soundToggles ?? defaults.soundToggles,
+      omUsedThisRun: parsed.omUsedThisRun ?? defaults.omUsedThisRun,
+      fastestPrestige: parsed.fastestPrestige ?? defaults.fastestPrestige,
+      totalOrbitalToggles: parsed.totalOrbitalToggles ?? defaults.totalOrbitalToggles,
+      maxComboReached: parsed.maxComboReached ?? defaults.maxComboReached,
     };
     return migrated;
   } catch (e) {
@@ -113,6 +119,12 @@ export function importSave(encoded: string): GameState | null {
       tutorialCompleted: parsed.tutorialCompleted || defaults.tutorialCompleted,
       tutorialSkipped: parsed.tutorialSkipped ?? defaults.tutorialSkipped,
       adsRemoved: parsed.adsRemoved ?? defaults.adsRemoved,
+      // Achievement tracking (added in v12)
+      soundToggles: parsed.soundToggles ?? defaults.soundToggles,
+      omUsedThisRun: parsed.omUsedThisRun ?? defaults.omUsedThisRun,
+      fastestPrestige: parsed.fastestPrestige ?? defaults.fastestPrestige,
+      totalOrbitalToggles: parsed.totalOrbitalToggles ?? defaults.totalOrbitalToggles,
+      maxComboReached: parsed.maxComboReached ?? defaults.maxComboReached,
     };
     return migrated;
   } catch {

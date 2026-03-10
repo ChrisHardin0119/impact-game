@@ -162,6 +162,13 @@ export interface GameState {
     massDrop: { lastUsed: number };  // timestamp of last use
   };
 
+  // Achievement tracking
+  soundToggles: number;        // rapid sound on/off count (for "Indecisive")
+  omUsedThisRun: boolean;      // whether any OM was used this run
+  fastestPrestige: number;     // fastest prestige time in seconds
+  totalOrbitalToggles: number; // total times toggles flipped
+  maxComboReached: number;     // highest click combo achieved
+
   // Meta
   lastSaveTime: number;
   version: number;

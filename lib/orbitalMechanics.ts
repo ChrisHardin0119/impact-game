@@ -1,5 +1,16 @@
 import { OrbitalMechanicDef, PrestigeTier } from './types';
 
+/**
+ * ENERGY DRAIN BALANCE:
+ * Base regen at Tier 0: 2.5/sec
+ * Design: 1 toggle affordable immediately, 2 with a couple energy_regen upgrades
+ *
+ * Tier 0 toggles: 1.5, 1.0, 0.8 (total: 3.3 — need ~1 upgrade for 2 at once)
+ * Tier 1 toggles: 1.0, 0.8, 1.5 (plus Tier 0 = 7.6 total)
+ * Tier 2 toggles: 2.5, 0 (siphon)
+ * Tier 3 toggles: 3.0, 2.5
+ * All toggles total: ~15.6/sec (achievable with maxed energy path + tier bonus)
+ */
 export const ORBITAL_MECHANICS: OrbitalMechanicDef[] = [
   // ===== TIER 0 — Starting =====
   {
@@ -8,8 +19,8 @@ export const ORBITAL_MECHANICS: OrbitalMechanicDef[] = [
     emoji: '📈',
     desc: '1.3x mass production while active.',
     isToggle: true,
-    energyCost: 15,
-    energyDrain: 2.0,
+    energyCost: 10,
+    energyDrain: 1.5,    // was 2.0
     cooldown: 0,
     duration: 0,
     unlockTier: 0,
@@ -20,8 +31,8 @@ export const ORBITAL_MECHANICS: OrbitalMechanicDef[] = [
     emoji: '⬆️',
     desc: '+0.2 gravity per second while active.',
     isToggle: true,
-    energyCost: 10,
-    energyDrain: 1.5,
+    energyCost: 8,
+    energyDrain: 1.0,    // was 1.5
     cooldown: 0,
     duration: 0,
     unlockTier: 0,
@@ -32,8 +43,8 @@ export const ORBITAL_MECHANICS: OrbitalMechanicDef[] = [
     emoji: '🌊',
     desc: '+0.003 density per second while active.',
     isToggle: true,
-    energyCost: 10,
-    energyDrain: 1.2,
+    energyCost: 8,
+    energyDrain: 0.8,    // was 1.2
     cooldown: 0,
     duration: 0,
     unlockTier: 0,
@@ -44,7 +55,7 @@ export const ORBITAL_MECHANICS: OrbitalMechanicDef[] = [
     emoji: '☄️',
     desc: '5x click power for 10 seconds. Tap fast!',
     isToggle: false,
-    energyCost: 40,
+    energyCost: 30,       // was 40
     energyDrain: 0,
     cooldown: 45,
     duration: 10,
@@ -56,10 +67,10 @@ export const ORBITAL_MECHANICS: OrbitalMechanicDef[] = [
     id: 'gravity_brake',
     name: 'Gravity Brake',
     emoji: '🛑',
-    desc: '−0.15 gravity per second. Lower gravity when it gets too high.',
+    desc: 'Lowers gravity by 0.15/sec. Use when gravity is too high.',
     isToggle: true,
-    energyCost: 15,
-    energyDrain: 1.5,
+    energyCost: 12,
+    energyDrain: 1.0,    // was 1.5
     cooldown: 0,
     duration: 0,
     unlockTier: 1,
@@ -68,10 +79,10 @@ export const ORBITAL_MECHANICS: OrbitalMechanicDef[] = [
     id: 'density_vent',
     name: 'Density Vent',
     emoji: '💨',
-    desc: '−0.005 density per second. Shed excess density fast.',
+    desc: 'Lowers density by 0.005/sec. Shed excess density fast.',
     isToggle: true,
-    energyCost: 15,
-    energyDrain: 1.2,
+    energyCost: 12,
+    energyDrain: 0.8,    // was 1.2
     cooldown: 0,
     duration: 0,
     unlockTier: 1,
@@ -82,8 +93,8 @@ export const ORBITAL_MECHANICS: OrbitalMechanicDef[] = [
     emoji: '🔧',
     desc: '40% off all process costs while active.',
     isToggle: true,
-    energyCost: 20,
-    energyDrain: 2.0,
+    energyCost: 15,
+    energyDrain: 1.5,    // was 2.0
     cooldown: 0,
     duration: 0,
     unlockTier: 1,
@@ -94,7 +105,7 @@ export const ORBITAL_MECHANICS: OrbitalMechanicDef[] = [
     emoji: '〰️',
     desc: '2x all synergy bonuses for 15 seconds.',
     isToggle: false,
-    energyCost: 50,
+    energyCost: 40,       // was 50
     energyDrain: 0,
     cooldown: 75,
     duration: 15,
@@ -108,8 +119,8 @@ export const ORBITAL_MECHANICS: OrbitalMechanicDef[] = [
     emoji: '⏳',
     desc: '1.5x ALL generation (mass, gravity, density) while active.',
     isToggle: true,
-    energyCost: 25,
-    energyDrain: 3.0,
+    energyCost: 20,
+    energyDrain: 2.5,    // was 3.0
     cooldown: 0,
     duration: 0,
     unlockTier: 2,
@@ -118,9 +129,9 @@ export const ORBITAL_MECHANICS: OrbitalMechanicDef[] = [
     id: 'energy_siphon',
     name: 'Energy Siphon',
     emoji: '⚡',
-    desc: '+0.5 energy regen. Tradeoff: −0.1 gravity/sec.',
+    desc: '+1.5 energy regen. Tradeoff: −0.1 gravity/sec.',
     isToggle: true,
-    energyCost: 30,
+    energyCost: 25,
     energyDrain: 0, // free drain — but costs gravity
     cooldown: 0,
     duration: 0,
@@ -132,7 +143,7 @@ export const ORBITAL_MECHANICS: OrbitalMechanicDef[] = [
     emoji: '🌈',
     desc: '3x mass production for 12 seconds.',
     isToggle: false,
-    energyCost: 60,
+    energyCost: 50,       // was 60
     energyDrain: 0,
     cooldown: 60,
     duration: 12,
@@ -146,8 +157,8 @@ export const ORBITAL_MECHANICS: OrbitalMechanicDef[] = [
     emoji: '🌀',
     desc: '2x gravity generation while active.',
     isToggle: true,
-    energyCost: 35,
-    energyDrain: 4.0,
+    energyCost: 30,
+    energyDrain: 3.0,    // was 4.0
     cooldown: 0,
     duration: 0,
     unlockTier: 3,
@@ -158,8 +169,8 @@ export const ORBITAL_MECHANICS: OrbitalMechanicDef[] = [
     emoji: '💎',
     desc: '2x density generation while active.',
     isToggle: true,
-    energyCost: 30,
-    energyDrain: 3.5,
+    energyCost: 25,
+    energyDrain: 2.5,    // was 3.5
     cooldown: 0,
     duration: 0,
     unlockTier: 3,

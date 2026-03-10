@@ -10,6 +10,7 @@ import {
   getMaxEnergy,
 } from './resources';
 import { calcShards } from './prestige';
+import { hasProcessMilestone } from './discoveries';
 
 /**
  * Calculates production for a single process.
@@ -61,6 +62,13 @@ export function getProcessProduction(
       gravityProduction *= synergyMult;
       densityProduction *= synergyMult;
     }
+  }
+
+  // Apply process milestone bonus (2x from achievements — AdCap style)
+  if (hasProcessMilestone(processId, state.discoveries)) {
+    massProduction *= 2;
+    gravityProduction *= 2;
+    densityProduction *= 2;
   }
 
   // Apply core upgrade bonuses
@@ -133,12 +141,36 @@ export function getProcessProduction(
     gravityProduction *= 3.5;
   }
 
-  if (
-    state.discoveries.includes('tectonic_master') &&
-    state.composition === 'silicate'
-  ) {
+  // Mass Millionaire: +10% all mass production
+  if (state.discoveries.includes('mass_millionaire')) {
+    massProduction *= 1.1;
+  }
+
+  // Gravity King: +20% gravity generation
+  if (state.discoveries.includes('gravity_king')) {
+    gravityProduction *= 1.2;
+  }
+
+  // Maximum Density: +25% density gains
+  if (state.discoveries.includes('density_max')) {
+    densityProduction *= 1.25;
+  }
+
+  // Speed Runner: +10% all production
+  if (state.discoveries.includes('speed_runner')) {
+    massProduction *= 1.1;
+    gravityProduction *= 1.1;
+    densityProduction *= 1.1;
+  }
+
+  // Iron Will: +25% density gains as Iron
+  if (state.discoveries.includes('iron_will') && state.composition === 'iron') {
+    densityProduction *= 1.25;
+  }
+
+  // Backwards Builder: +50% Dust Collector production
+  if (state.discoveries.includes('backwards_builder') && processId === 'dust_collector') {
     massProduction *= 1.5;
-    gravityProduction *= 1.5;
   }
 
   return {
@@ -213,6 +245,11 @@ export function getClickValue(state: GameState, comboMultiplier: number = 1): nu
     value *= 5;
   }
 
+  // Click Addict: +25% click value
+  if (state.discoveries.includes('click_addict')) {
+    value *= 1.25;
+  }
+
   return value;
 }
 
@@ -273,7 +310,11 @@ export function processTick(state: GameState, dt: number): GameState {
   // ===== ENERGY: regen then drain from toggles =====
   const maxEnergy = getMaxEnergy(newState);
   const energyRegen = getEnergyRegen(newState);
-  const totalDrain = getTotalEnergyDrain(newState.omToggles || {});
+  let totalDrain = getTotalEnergyDrain(newState.omToggles || {});
+  // Toggle Maniac discovery: -10% toggle energy drain
+  if (newState.discoveries.includes('toggle_maniac')) {
+    totalDrain *= 0.9;
+  }
   const netEnergy = energyRegen - totalDrain;
   newState.energy += netEnergy * dt;
 
@@ -459,14 +500,30 @@ export function spawnComet(state: GameState): { state: GameState; value: number 
     value *= 1.5;
   }
 
+  // Comet Catcher: +50% comet value
+  if (state.discoveries.includes('comet_catcher')) {
+    value *= 1.5;
+  }
+
+  // Comet Chain: +100% comet value (stacks)
+  if (state.discoveries.includes('comet_chain')) {
+    value *= 2;
+  }
+
   let newState = {
     ...state,
     mass: state.mass + value,
     cometsCaught: state.cometsCaught + 1,
   };
 
+  // Base comet timing
   if (state.composition === 'ice') {
-    newState.nextCometIn = 3 + Math.random() * 5;
+    let cometInterval = 3 + Math.random() * 5;
+    // Frozen Fortune: +50% comet spawn rate (shorter intervals) as Ice
+    if (state.discoveries.includes('ice_comets')) {
+      cometInterval *= 0.67;
+    }
+    newState.nextCometIn = cometInterval;
   } else {
     newState.nextCometIn = 15 + Math.random() * 15;
   }
