@@ -1,7 +1,8 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { BoostType, BOOST_DEFS } from '@/lib/boosts';
+import { isNativePlatform, showRewardedAd } from '@/lib/adMobBridge';
 
 interface Props {
   boostType: BoostType;
@@ -11,9 +12,29 @@ interface Props {
 
 export default function AdModal({ boostType, onComplete, onCancel }: Props) {
   const [countdown, setCountdown] = useState(5);
+  const [nativeAdState, setNativeAdState] = useState<'loading' | 'showing' | 'done'>('loading');
   const boost = BOOST_DEFS.find(b => b.id === boostType);
+  const attemptedNative = useRef(false);
 
+  // On native platforms, show a real AdMob rewarded ad
   useEffect(() => {
+    if (!isNativePlatform() || attemptedNative.current) return;
+    attemptedNative.current = true;
+
+    setNativeAdState('showing');
+    showRewardedAd().then((rewarded) => {
+      setNativeAdState('done');
+      if (rewarded) {
+        onComplete();
+      } else {
+        onCancel();
+      }
+    });
+  }, [onComplete, onCancel]);
+
+  // On web, use the countdown placeholder
+  useEffect(() => {
+    if (isNativePlatform()) return;
     if (countdown <= 0) {
       onComplete();
       return;
@@ -24,6 +45,24 @@ export default function AdModal({ boostType, onComplete, onCancel }: Props) {
 
   if (!boost) return null;
 
+  // On native, show a minimal loading screen while ad loads
+  if (isNativePlatform()) {
+    return (
+      <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 px-4">
+        <div className="card max-w-sm w-full text-center mx-4">
+          <div className="text-4xl mb-2">{boost.emoji}</div>
+          <div className="text-sm text-gray-400 mb-4">
+            {nativeAdState === 'loading' ? 'Loading ad...' : 'Playing ad...'}
+          </div>
+          <div className="text-xs text-gray-500 animate-pulse">
+            Complete the ad to earn your boost!
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Web placeholder UI
   return (
     <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 px-4">
       <div className="card max-w-sm w-full text-center mx-4">

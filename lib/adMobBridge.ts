@@ -11,17 +11,20 @@
  * 4. Use showRewardedAd() before granting boost rewards
  */
 
-// Placeholder ad unit IDs — replace with real ones before app store submission
+// Ad unit IDs — using Google test IDs for development
+// Replace with real ones from your AdMob console before production release
+const USE_TEST_ADS = true; // Set to false when you have real ad unit IDs
+
 export const AD_UNIT_IDS = {
   ios: {
-    rewarded: 'ca-app-pub-XXXXXXXXXX/YYYYYYYYYY', // Replace with real iOS rewarded ad unit ID
+    rewarded: USE_TEST_ADS
+      ? 'ca-app-pub-3940256099942544/1712485313' // Google test rewarded (iOS)
+      : 'ca-app-pub-XXXXXXXXXX/YYYYYYYYYY', // Replace with real iOS rewarded ad unit ID
   },
   android: {
-    rewarded: 'ca-app-pub-XXXXXXXXXX/YYYYYYYYYY', // Replace with real Android rewarded ad unit ID
-  },
-  // Test IDs for development
-  test: {
-    rewarded: 'ca-app-pub-3940256099942544/5224354917', // Google test ad unit ID
+    rewarded: USE_TEST_ADS
+      ? 'ca-app-pub-3940256099942544/5224354917' // Google test rewarded (Android)
+      : 'ca-app-pub-XXXXXXXXXX/YYYYYYYYYY', // Replace with real Android rewarded ad unit ID
   },
 };
 
@@ -89,22 +92,28 @@ export async function showRewardedAd(): Promise<boolean> {
       : AD_UNIT_IDS.android.rewarded;
 
     return new Promise<boolean>(async (resolve) => {
+      let rewardHandle: { remove: () => void } | null = null;
+      let dismissHandle: { remove: () => void } | null = null;
+
+      const cleanup = () => {
+        rewardHandle?.remove();
+        dismissHandle?.remove();
+      };
+
       // Listen for reward event
-      const rewardListener = AdMob.addListener(
+      rewardHandle = await AdMob.addListener(
         RewardAdPluginEvents.Rewarded,
         () => {
-          rewardListener.remove();
-          dismissListener.remove();
+          cleanup();
           resolve(true);
         }
       );
 
       // Listen for dismiss without reward
-      const dismissListener = AdMob.addListener(
+      dismissHandle = await AdMob.addListener(
         RewardAdPluginEvents.Dismissed,
         () => {
-          rewardListener.remove();
-          dismissListener.remove();
+          cleanup();
           resolve(false);
         }
       );
@@ -113,8 +122,7 @@ export async function showRewardedAd(): Promise<boolean> {
         await AdMob.prepareRewardVideoAd({ adId });
         await AdMob.showRewardVideoAd();
       } catch (err) {
-        rewardListener.remove();
-        dismissListener.remove();
+        cleanup();
         console.warn('Rewarded ad failed:', err);
         resolve(false);
       }

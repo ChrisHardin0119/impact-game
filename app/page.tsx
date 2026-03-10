@@ -22,6 +22,7 @@ import AdModal from '@/components/AdModal';
 import { BoostType, applyBoost } from '@/lib/boosts';
 import FeedbackButton from '@/components/FeedbackButton';
 import FeedbackForm from '@/components/FeedbackForm';
+import { initAdMob } from '@/lib/adMobBridge';
 
 export default function GamePage() {
   const [state, setStateRaw] = useState<GameState>(defaultGameState());
@@ -50,6 +51,11 @@ export default function GamePage() {
   // Ensure text size adjust on mobile
   useEffect(() => {
     document.documentElement.style.setProperty('-webkit-text-size-adjust', '100%');
+  }, []);
+
+  // Initialize AdMob on native platforms
+  useEffect(() => {
+    initAdMob();
   }, []);
 
   // Load save on mount
