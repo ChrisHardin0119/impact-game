@@ -3,17 +3,16 @@ Your branch is up to date with 'origin/main'.
 
 Changes to be committed:
   (use "git restore --staged <file>..." to unstage)
-	new file:   gitlog.txt
+	modified:   gitlog.txt
 
 Changes not staged for commit:
   (use "git add <file>..." to update what will be committed)
   (use "git restore <file>..." to discard changes in working directory)
 	modified:   gitlog.txt
 
-[main 6ea1cd5] v12.1: Fix tutorial text, force redeploy
- 1 file changed, 22 insertions(+)
- create mode 100644 gitlog.txt
+[main 4add34c] v12.1: Fix tutorial text, force redeploy
+ 1 file changed, 9 insertions(+), 12 deletions(-)
 /"C:/Program Files/GitHub CLI/gh.exe" auth git-credential store: line 1: /C:/Program Files/GitHub CLI/gh.exe: No such file or directory
 To https://github.com/ChrisHardin0119/impact-game.git
-   ced124c..6ea1cd5  main -> main
+   6ea1cd5..4add34c  main -> main
 DONE 

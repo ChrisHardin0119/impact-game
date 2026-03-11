@@ -33,15 +33,24 @@ export default function GamePage() {
   const [offlineGains, setOfflineGains] = useState<{mass: number, time: number} | null>(null);
   const nextFloatId = useRef(0);
   const nextToastId = useRef(0);
-  const [tutorialStep, setTutorialStep] = useState(-1); // -1 = not showing walkthrough
+  const [tutorialStep, setTutorialStep] = useState(-1);
   const [contextualHint, setContextualHint] = useState<TutorialStep | null>(null);
   const lastHintCheckRef = useRef(0);
   const [pendingBoost, setPendingBoost] = useState<BoostType | null>(null);
   const [showFeedback, setShowFeedback] = useState(false);
 
   // Click combo system
-  const [clickCombo, setClickCombo] = useState(0); // number of rapid clicks (0–20)
+  const [clickCombo, setClickCombo] = useState(0);
   const comboTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Scroll state for mini asteroid
+  const [isScrolled, setIsScrolled] = useState(false);
+  const scrollRef = useRef<HTMLDivElement>(null);
+
+  // Draggable mini asteroid position
+  const [miniPos, setMiniPos] = useState<{x: number, y: number}>({ x: 16, y: -1 }); // y=-1 means auto
+  const isDragging = useRef(false);
+  const dragOffset = useRef({ x: 0, y: 0 });
 
   const setState = useCallback((s: GameState) => {
     stateRef.current = s;
@@ -58,6 +67,68 @@ export default function GamePage() {
     initAdMob();
   }, []);
 
+  // Load saved mini-asteroid position
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem('impact_mini_pos');
+      if (saved) setMiniPos(JSON.parse(saved));
+    } catch {}
+  }, []);
+
+  // Save mini-asteroid position when it changes
+  useEffect(() => {
+    try {
+      localStorage.setItem('impact_mini_pos', JSON.stringify(miniPos));
+    } catch {}
+  }, [miniPos]);
+
+  // Scroll listener for content area
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    const onScroll = () => {
+      setIsScrolled(el.scrollTop > 100);
+    };
+    el.addEventListener('scroll', onScroll, { passive: true });
+    return () => el.removeEventListener('scroll', onScroll);
+  }, [loaded]);
+
+  // Mini asteroid drag handlers
+  const handleDragStart = useCallback((e: React.MouseEvent | React.TouchEvent) => {
+    isDragging.current = true;
+    const clientX = 'touches' in e ? e.touches[0].clientX : e.clientX;
+    const clientY = 'touches' in e ? e.touches[0].clientY : e.clientY;
+    const el = (e.target as HTMLElement).closest('.mini-asteroid') as HTMLElement;
+    if (el) {
+      const rect = el.getBoundingClientRect();
+      dragOffset.current = { x: clientX - rect.left, y: clientY - rect.top };
+    }
+    e.preventDefault();
+  }, []);
+
+  useEffect(() => {
+    const onMove = (e: MouseEvent | TouchEvent) => {
+      if (!isDragging.current) return;
+      const clientX = 'touches' in e ? e.touches[0].clientX : e.clientX;
+      const clientY = 'touches' in e ? e.touches[0].clientY : e.clientY;
+      setMiniPos({
+        x: Math.max(0, Math.min(window.innerWidth - 60, clientX - dragOffset.current.x)),
+        y: Math.max(0, Math.min(window.innerHeight - 60, clientY - dragOffset.current.y)),
+      });
+    };
+    const onEnd = () => { isDragging.current = false; };
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onEnd);
+    window.addEventListener('touchmove', onMove, { passive: false });
+    window.addEventListener('touchend', onEnd);
+    return () => {
+      window.removeEventListener('mousemove', onMove);
+      window.removeEventListener('mouseup', onEnd);
+      window.removeEventListener('touchmove', onMove);
+      window.removeEventListener('touchend', onEnd);
+    };
+  }, []);
+
   // Load save on mount
   useEffect(() => {
     const saved = loadGame();
@@ -69,7 +140,6 @@ export default function GamePage() {
       }
       setState(restored);
     } else {
-      // New player — start walkthrough tutorial
       setTutorialStep(0);
     }
     setLoaded(true);
@@ -80,7 +150,7 @@ export default function GamePage() {
 
   // Check contextual hints periodically
   useEffect(() => {
-    if (!loaded || tutorialStep >= 0) return; // Don't show hints during walkthrough
+    if (!loaded || tutorialStep >= 0) return;
     const interval = setInterval(() => {
       const s = stateRef.current;
       if (s.tutorialSkipped && s.tutorialCompleted.length === 0) return;
@@ -113,7 +183,7 @@ export default function GamePage() {
       });
     }
     if (nextStep >= WALKTHROUGH_STEPS.length) {
-      setTutorialStep(-1); // Done
+      setTutorialStep(-1);
     } else {
       setTutorialStep(nextStep);
     }
@@ -167,20 +237,15 @@ export default function GamePage() {
 
   // Click handler with combo system
   const handleClick = useCallback((e: React.MouseEvent) => {
-    // Build combo: each rapid click increments combo (max 20 → 5x multiplier)
     setClickCombo(prev => {
       const newCombo = Math.min(prev + 1, 20);
-      // Reset combo decay timer
       if (comboTimerRef.current) clearTimeout(comboTimerRef.current);
       comboTimerRef.current = setTimeout(() => setClickCombo(0), 1500);
       return newCombo;
     });
-
-    // Combo multiplier: 1x at 0, up to 5x at 20 combo
     const comboMult = 1 + (Math.min(clickCombo, 20) / 20) * 4;
     const newState = processClick(stateRef.current, comboMult);
     const clickValue = newState.mass - stateRef.current.mass;
-    // Track max combo for achievements
     if (clickCombo > (newState.maxComboReached || 0)) {
       newState.maxComboReached = clickCombo;
     }
@@ -193,10 +258,15 @@ export default function GamePage() {
     setTimeout(() => setFloatingNums(prev => prev.filter(f => f.id !== id)), 1000);
   }, [setState, clickCombo]);
 
-  // Helper: calculate buy info for a process based on current buy mode
+  // Mini asteroid click — scrolls back to top
+  const handleMiniClick = useCallback(() => {
+    if (isDragging.current) return;
+    scrollRef.current?.scrollTo({ top: 0, behavior: 'smooth' });
+  }, []);
+
+  // Buy info helper
   const getBuyInfo = useCallback((processDef: typeof PROCESSES[0], owned: number, mass: number, buyMode: BuyMode, hasDiscount: boolean) => {
     if (buyMode === 'max') {
-      // Buy as many as affordable
       let affordable = 0;
       let totalCost = 0;
       let remaining = mass;
@@ -209,14 +279,12 @@ export default function GamePage() {
         affordable++;
       }
       if (affordable === 0) {
-        // Show cost of next single unit
         let singleCost = getProcessCost(processDef, owned);
         if (hasDiscount) singleCost *= 0.5;
         return { count: 0, totalCost: singleCost, canAfford: false, label: fmt(singleCost) };
       }
       return { count: affordable, totalCost, canAfford: true, label: `${fmt(totalCost)} (x${affordable})` };
     } else {
-      // Exact amount: buy exactly N or nothing
       const count = buyMode as number;
       let totalCost = 0;
       for (let i = 0; i < count; i++) {
@@ -234,13 +302,10 @@ export default function GamePage() {
     const s = stateRef.current;
     const processDef = PROCESSES.find(p => p.id === processId);
     if (!processDef) return;
-
     const owned = s.processes[processId] || 0;
     const hasDiscount = s.omToggles?.['process_optimizer'] || false;
     const info = getBuyInfo(processDef, owned, s.mass, s.buyMode, hasDiscount);
-
     if (!info.canAfford || info.count <= 0) return;
-
     const newState = {
       ...s,
       mass: s.mass - info.totalCost,
@@ -249,14 +314,12 @@ export default function GamePage() {
     setState(newState);
   }, [setState, getBuyInfo]);
 
-  // Activate orbital mechanic (toggle or one-shot)
   const handleOM = useCallback((omId: string) => {
     const omDef = ORBITAL_MECHANICS.find(o => o.id === omId);
     if (!omDef) return;
     const currentState = stateRef.current;
     const result = activateOrbitalMechanic(omId, currentState);
     if (result) {
-      // Track OM usage for achievements
       result.omUsedThisRun = true;
       if (omDef.isToggle) {
         result.totalOrbitalToggles = (result.totalOrbitalToggles || 0) + 1;
@@ -271,7 +334,6 @@ export default function GamePage() {
     }
   }, [setState, addToast]);
 
-  // Buy core upgrade
   const handleUpgrade = useCallback((upgradeId: string) => {
     const s = stateRef.current;
     const def = CORE_UPGRADES.find(u => u.id === upgradeId);
@@ -286,12 +348,9 @@ export default function GamePage() {
     addToast(`Upgraded ${def.name}!`, def.emoji);
   }, [setState, addToast]);
 
-  // Prestige
   const handlePrestige = useCallback(() => {
     const s = stateRef.current;
     if (!canPrestige(s)) return;
-
-    // Check prestige-time discoveries BEFORE reset
     const prestigeDiscoveries = checkPrestigeDiscoveries(s);
     let updatedState = { ...s };
     if (prestigeDiscoveries.length > 0) {
@@ -301,12 +360,9 @@ export default function GamePage() {
         if (d) addToast(`${d.hidden ? '🔒 Secret: ' : ''}${d.name}!`, d.emoji, 'reward');
       }
     }
-
-    // Track fastest prestige
     if (s.runTime > 0 && s.runTime < (updatedState.fastestPrestige || Infinity)) {
       updatedState.fastestPrestige = s.runTime;
     }
-
     let shardMult = 1;
     if (updatedState.boosts.prestigeDouble.active && !updatedState.boosts.prestigeDouble.usedThisRun) {
       shardMult = 2;
@@ -331,18 +387,15 @@ export default function GamePage() {
     addToast(`Prestige! +${fmt(shardsEarned)} shards${doubleText}`, '💎');
   }, [setState, addToast]);
 
-  // Choose composition
   const handleComposition = useCallback((id: string) => {
     setState({ ...stateRef.current, composition: id as any });
     addToast(`Composition: ${id}`, '🪨');
   }, [setState, addToast]);
 
-  // Set tab
   const setTab = useCallback((tab: TabName) => {
     setState({ ...stateRef.current, activeTab: tab });
   }, [setState]);
 
-  // Set buy mode
   const setBuyMode = useCallback((mode: BuyMode) => {
     setState({ ...stateRef.current, buyMode: mode });
   }, [setState]);
@@ -373,57 +426,60 @@ export default function GamePage() {
   const unlockedComps = getUnlockedCompositions(state.currentTier);
   const unlockedOM = getUnlockedOM(state.currentTier);
 
+  // Whether we're on the build tab (show asteroid area or mini)
+  const showMiniAsteroid = isScrolled && activeTab === 'build';
+
   return (
     <div className="scanlines flex flex-col game-shell no-select safe-top">
       {/* Resource Header */}
-      <div className="bg-space-light border-b border-gray-700 px-3 sm:px-4 py-2 safe-x">
+      <div className="bg-space-light border-b border-gray-700 px-4 sm:px-5 py-2.5 safe-x">
         <div className="flex items-center justify-between mb-1.5">
           <div className="flex items-center gap-2 sm:gap-4 min-w-0">
             <span className="glow-cyan font-bold text-base sm:text-xl truncate">{currentTierDef.emoji} {currentTierDef.name}</span>
-            {state.composition && <span className="text-sm text-gray-400 truncate">| {COMPOSITIONS.find(c => c.id === state.composition)?.name}</span>}
+            {state.composition && <span className="badge badge-purple">{COMPOSITIONS.find(c => c.id === state.composition)?.name}</span>}
           </div>
           <div className="flex gap-2 shrink-0 items-center">
             <button className="btn-secondary text-sm px-2.5 py-1" onClick={() => saveGame(state)}>Save</button>
             <button className="btn-secondary text-sm px-2.5 py-1" onClick={() => setTab('stats')}>⚙</button>
-            <span className="text-xs text-gray-600">v12.1</span>
+            <span className="text-xs text-gray-600">v12.2</span>
           </div>
         </div>
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-x-4 gap-y-2 sm:gap-3">
           {/* Mass */}
           <div>
-            <div className="text-sm text-gray-400">Mass</div>
+            <div className="text-xs text-gray-400 uppercase tracking-wider">Mass</div>
             <div className="glow-cyan text-base font-bold">{fmt(state.mass)}</div>
-            {massPerSec > 0 && <div className="text-sm text-green">+{fmt(massPerSec)}/s</div>}
+            {massPerSec > 0 && <div className="text-sm text-green font-bold">+{fmt(massPerSec)}/s</div>}
           </div>
           {/* Gravity */}
           <div>
-            <div className="text-sm text-gray-400">Gravity <span className="text-white">{fmt(state.gravity, 0)}/300</span></div>
+            <div className="text-xs text-gray-400 uppercase tracking-wider">Gravity <span className="text-white normal-case">{fmt(state.gravity, 0)}/300</span></div>
             <div className="resource-bar mt-1">
               <div className="resource-bar-fill" style={{width: `${(state.gravity / 300) * 100}%`, background: gravZone.color}} />
             </div>
             <div className="flex items-center gap-1.5 mt-0.5">
-              <span className="text-sm font-bold" style={{color: gravZone.color}}>{gravZone.label}</span>
-              <span className="text-sm font-bold" style={{color: gravMult >= 1 ? 'var(--color-green)' : 'var(--color-red)'}}>{gravMult.toFixed(2)}x prod</span>
+              <span className="text-xs font-bold" style={{color: gravZone.color}}>{gravZone.label}</span>
+              <span className="badge" style={{background: gravMult >= 1 ? 'rgba(0,255,136,0.15)' : 'rgba(255,51,102,0.15)', color: gravMult >= 1 ? 'var(--color-green)' : 'var(--color-red)', border: 'none', fontSize: '0.65rem'}}>{gravMult.toFixed(2)}x</span>
             </div>
           </div>
           {/* Density */}
           <div>
-            <div className="text-sm text-gray-400">Density <span className="text-white">{state.density.toFixed(1)}%</span></div>
+            <div className="text-xs text-gray-400 uppercase tracking-wider">Density <span className="text-white normal-case">{state.density.toFixed(1)}%</span></div>
             <div className="resource-bar mt-1">
               <div className="resource-bar-fill" style={{width: `${state.density}%`, background: densZone.color}} />
             </div>
             <div className="flex items-center gap-1.5 mt-0.5">
-              <span className="text-sm font-bold" style={{color: densZone.color}}>{densZone.label}</span>
-              <span className="text-sm font-bold" style={{color: densMult >= 1 ? 'var(--color-purple)' : 'var(--color-red)'}}>{densMult.toFixed(2)}x prod</span>
+              <span className="text-xs font-bold" style={{color: densZone.color}}>{densZone.label}</span>
+              <span className="badge" style={{background: densMult >= 1 ? 'rgba(180,74,255,0.15)' : 'rgba(255,51,102,0.15)', color: densMult >= 1 ? 'var(--color-purple)' : 'var(--color-red)', border: 'none', fontSize: '0.65rem'}}>{densMult.toFixed(2)}x</span>
             </div>
           </div>
           {/* Energy */}
           <div>
-            <div className="text-sm text-gray-400">Energy <span className="text-white">{Math.floor(state.energy)}/{getMaxEnergy(state)}</span></div>
+            <div className="text-xs text-gray-400 uppercase tracking-wider">Energy <span className="text-white normal-case">{Math.floor(state.energy)}/{getMaxEnergy(state)}</span></div>
             <div className="resource-bar mt-1">
               <div className="resource-bar-fill" style={{width: `${(state.energy / getMaxEnergy(state)) * 100}%`, background: 'var(--color-orange)'}} />
             </div>
-            <div className="text-sm text-orange mt-0.5">+{getEnergyRegen(state).toFixed(1)}/s</div>
+            <div className="text-xs text-orange mt-0.5 font-bold">+{getEnergyRegen(state).toFixed(1)}/s</div>
           </div>
         </div>
       </div>
@@ -440,18 +496,19 @@ export default function GamePage() {
         ))}
       </div>
 
-      {/* Content Area */}
-      <div className="flex-1 overflow-y-auto px-3 sm:px-4 py-3 pb-16 safe-bottom safe-x">
-        {/* Composition Picker (shown if no composition selected) */}
+      {/* Content Area — increased horizontal padding */}
+      <div ref={scrollRef} className="flex-1 overflow-y-auto px-4 sm:px-6 py-3 pb-16 safe-bottom safe-x">
+        {/* Composition Picker */}
         {!state.composition && activeTab === 'build' && (
           <div className="mb-4">
-            <h2 className="glow-cyan text-lg mb-2">Choose Your Composition</h2>
+            <div className="section-header"><h2 className="glow-cyan text-lg font-bold">Choose Your Composition</h2></div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               {unlockedComps.map(c => (
-                <button key={c.id} className="card text-left hover:border-neon transition-colors p-3" onClick={() => handleComposition(c.id)}>
+                <button key={c.id} className="card text-left hover:border-neon transition-colors" onClick={() => handleComposition(c.id)}>
                   <div className="font-bold text-base">{c.emoji} {c.name}</div>
                   <div className="text-sm text-gray-400 mt-1">{c.desc}</div>
-                  <div className="text-sm text-purple mt-1">{c.specialName}: {c.specialDesc}</div>
+                  <div className="glow-divider" />
+                  <div className="text-sm text-purple">{c.specialName}: {c.specialDesc}</div>
                 </button>
               ))}
             </div>
@@ -462,16 +519,14 @@ export default function GamePage() {
         {activeTab === 'build' && (
           <div>
             {/* Click area */}
-            <div className="flex justify-center mb-4">
+            <div className="flex justify-center mb-6 mt-1">
               <div className="relative cursor-pointer select-none" onClick={handleClick}>
                 <div className={`w-28 h-28 sm:w-32 sm:h-32 rounded-full bg-gradient-to-br from-gray-600 to-gray-800 border-2 flex items-center justify-center text-4xl hover:scale-105 transition-all active:scale-95 ${clickCombo >= 15 ? 'border-yellow' : clickCombo >= 8 ? 'border-orange' : clickCombo >= 3 ? 'border-neon' : 'border-gray-500'}`} style={{boxShadow: `0 0 ${Math.min(30, Math.log10(state.mass + 1) * 3) + clickCombo * 1.5}px ${clickCombo >= 15 ? 'var(--color-yellow)' : clickCombo >= 8 ? 'var(--color-orange)' : 'var(--color-neon)'}`}}>
                   🪨
                 </div>
-                {/* Click value display */}
-                <div className="absolute -bottom-5 left-1/2 -translate-x-1/2 text-sm text-gray-400 whitespace-nowrap">
+                <div className="absolute -bottom-5 left-1/2 -translate-x-1/2 text-xs text-gray-400 whitespace-nowrap">
                   +{fmt(getClickValue(state, 1 + (Math.min(clickCombo, 20) / 20) * 4))}/click
                 </div>
-                {/* Combo indicator */}
                 {clickCombo >= 3 && (
                   <div className={`absolute -top-3 left-1/2 -translate-x-1/2 text-xs font-bold px-2 py-0.5 rounded-full ${clickCombo >= 15 ? 'bg-yellow text-space' : clickCombo >= 8 ? 'bg-orange text-space' : 'bg-neon text-space'}`}>
                     {(1 + (Math.min(clickCombo, 20) / 20) * 4).toFixed(1)}x COMBO
@@ -487,16 +542,16 @@ export default function GamePage() {
 
             {/* Buy mode selector */}
             <div className="flex items-center gap-2 mb-3">
-              <span className="text-sm text-gray-400">Buy:</span>
+              <span className="text-xs text-gray-400 uppercase tracking-wider">Buy:</span>
               {([1, 5, 10, 100, 'max'] as BuyMode[]).map(m => (
-                <button key={String(m)} className={`text-sm px-2.5 py-1.5 rounded min-h-[36px] ${state.buyMode === m ? 'bg-neon text-space font-bold' : 'bg-space-lighter text-gray-400 hover:text-neon'}`} onClick={() => setBuyMode(m)}>
+                <button key={String(m)} className={`text-sm px-2.5 py-1.5 rounded-md min-h-[36px] transition-all ${state.buyMode === m ? 'bg-neon text-space font-bold shadow-[0_0_10px_rgba(0,240,255,0.3)]' : 'bg-space-lighter text-gray-400 hover:text-neon hover:border-neon border border-transparent'}`} onClick={() => setBuyMode(m)}>
                   {m === 'max' ? 'MAX' : `x${m}`}
                 </button>
               ))}
             </div>
 
             {/* Process list */}
-            <div className="space-y-2">
+            <div className="space-y-2.5">
               {PROCESSES.map(p => {
                 const owned = state.processes[p.id] || 0;
                 const hasDiscount = state.omToggles?.['process_optimizer'] || false;
@@ -505,22 +560,25 @@ export default function GamePage() {
                   (p.unlockCondition.type === 'mass' && state.totalMassEarned >= p.unlockCondition.value) ||
                   (p.unlockCondition.type === 'tier' && state.currentTier >= p.unlockCondition.value) ||
                   (p.unlockCondition.type === 'gravity' && state.gravity >= p.unlockCondition.value);
-
                 if (!unlocked && owned === 0) return null;
 
                 return (
-                  <div key={p.id} className={`card flex items-center justify-between p-3 ${buyInfo.canAfford ? 'hover:border-neon' : 'opacity-60'}`}>
-                    <div className="flex-1">
-                      <div className="flex items-center gap-2">
+                  <div key={p.id} className={`card flex items-center justify-between ${buyInfo.canAfford ? 'hover:border-neon' : 'opacity-60'}`}>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
                         <span className="text-lg">{p.emoji}</span>
                         <span className="font-bold text-base">{p.name}</span>
-                        <span className="text-sm text-gray-400">x{owned}</span>
-                        {p.compositionBonus === state.composition && <span className="text-sm text-purple">★ bonus</span>}
+                        <span className="badge badge-cyan">x{owned}</span>
+                        {p.compositionBonus === state.composition && <span className="badge badge-purple">★ bonus</span>}
                       </div>
-                      <div className="text-sm text-gray-400 mt-0.5">{p.desc}</div>
-                      <div className="text-sm text-neon-dim mt-0.5">+{fmt(p.baseMPS)}/s mass {p.gravityPS > 0 ? `| +${p.gravityPS}/s grav` : ''} {p.densityPS > 0 ? `| +${fmtPct(p.densityPS)}/s dens` : ''}</div>
+                      <div className="text-sm text-gray-400 mt-1">{p.desc}</div>
+                      <div className="flex flex-wrap gap-2 mt-1.5">
+                        <span className="badge badge-green">+{fmt(p.baseMPS)}/s mass</span>
+                        {p.gravityPS > 0 && <span className="badge badge-orange">+{p.gravityPS}/s grav</span>}
+                        {p.densityPS > 0 && <span className="badge badge-purple">+{fmtPct(p.densityPS)}/s dens</span>}
+                      </div>
                     </div>
-                    <button className="btn-primary text-sm ml-2" disabled={!buyInfo.canAfford} onClick={() => handleBuy(p.id)}>
+                    <button className="btn-primary text-sm ml-3 shrink-0" disabled={!buyInfo.canAfford} onClick={() => handleBuy(p.id)}>
                       {buyInfo.label}
                     </button>
                   </div>
@@ -544,7 +602,7 @@ export default function GamePage() {
           return (
             <div>
               {/* Energy Status Header */}
-              <div className={`card mb-3 ${isSustainable ? 'border-green' : 'border-red'}`} style={{borderWidth: '2px'}}>
+              <div className={`card mb-4 ${isSustainable ? 'border-green' : 'border-red'}`} style={{borderWidth: '2px'}}>
                 <div className="flex items-center justify-between mb-1">
                   <span className="font-bold text-base">⚡ Energy</span>
                   <span className="text-base font-bold" style={{color: isSustainable ? 'var(--color-green)' : 'var(--color-red)'}}>
@@ -557,22 +615,26 @@ export default function GamePage() {
                     background: state.energy < 20 ? 'var(--color-red)' : isSustainable ? 'var(--color-green)' : 'var(--color-orange)'
                   }} />
                 </div>
-                <div className="flex justify-between text-sm">
-                  <span className="text-green">Regen: +{energyRegen.toFixed(1)}/s</span>
-                  <span className="text-red">Drain: −{totalDrain.toFixed(1)}/s</span>
-                  <span className="font-bold" style={{color: isSustainable ? 'var(--color-green)' : 'var(--color-red)'}}>
-                    Net: {netEnergy >= 0 ? '+' : ''}{netEnergy.toFixed(1)}/s
+                <div className="flex justify-between text-sm flex-wrap gap-1">
+                  <span className="badge badge-green">Regen +{energyRegen.toFixed(1)}/s</span>
+                  <span className="badge badge-orange">Drain −{totalDrain.toFixed(1)}/s</span>
+                  <span className="badge" style={{
+                    background: isSustainable ? 'rgba(0,255,136,0.15)' : 'rgba(255,51,102,0.15)',
+                    color: isSustainable ? 'var(--color-green)' : 'var(--color-red)',
+                    border: `1px solid ${isSustainable ? 'rgba(0,255,136,0.3)' : 'rgba(255,51,102,0.3)'}`,
+                  }}>
+                    Net {netEnergy >= 0 ? '+' : ''}{netEnergy.toFixed(1)}/s
                   </span>
                 </div>
                 {activeToggleCount > 0 && (
-                  <div className="text-sm text-gray-400 mt-1">{activeToggleCount} toggle{activeToggleCount !== 1 ? 's' : ''} active</div>
+                  <div className="text-xs text-gray-400 mt-1.5">{activeToggleCount} toggle{activeToggleCount !== 1 ? 's' : ''} active</div>
                 )}
               </div>
 
               {/* Toggle Mechanics */}
-              <h2 className="glow-purple text-lg mb-2">Toggles</h2>
-              <div className="text-sm text-gray-400 mb-2">Click to turn ON/OFF. Drains energy while active.</div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mb-4">
+              <div className="section-header"><h2 className="glow-purple text-lg font-bold">Toggles</h2></div>
+              <div className="text-xs text-gray-400 mb-2 px-1">Click to turn ON/OFF. Drains energy while active.</div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 mb-4">
                 {toggleOMs.map(om => {
                   const isOn = state.omToggles?.[om.id] || false;
                   const canAffordStartup = state.energy >= om.energyCost;
@@ -580,7 +642,7 @@ export default function GamePage() {
                   return (
                     <button
                       key={om.id}
-                      className={`card text-left relative p-3 transition-all ${
+                      className={`card text-left relative transition-all ${
                         isOn
                           ? 'border-green box-glow-green'
                           : canToggle
@@ -590,7 +652,6 @@ export default function GamePage() {
                       onClick={() => handleOM(om.id)}
                       disabled={!canToggle}
                     >
-                      {/* ON/OFF badge */}
                       <div className={`absolute top-2 right-2 text-xs font-bold px-2 py-0.5 rounded-full ${
                         isOn ? 'bg-green text-space' : 'bg-gray-700 text-gray-400'
                       }`}>
@@ -601,9 +662,9 @@ export default function GamePage() {
                         <span className="font-bold text-sm">{om.name}</span>
                       </div>
                       <div className="text-sm text-gray-400 mt-1">{om.desc}</div>
-                      <div className="flex gap-3 mt-2 text-sm">
-                        <span className="text-orange">{om.energyCost}E start</span>
-                        <span className="text-red">−{om.energyDrain}/s drain</span>
+                      <div className="flex gap-2 mt-2">
+                        <span className="badge badge-orange">{om.energyCost}E start</span>
+                        <span className="badge" style={{background: 'rgba(255,51,102,0.15)', color: 'var(--color-red)', border: '1px solid rgba(255,51,102,0.3)'}}>−{om.energyDrain}/s</span>
                       </div>
                     </button>
                   );
@@ -613,9 +674,9 @@ export default function GamePage() {
               {/* One-Shot Mechanics */}
               {oneShotOMs.length > 0 && (
                 <>
-                  <h2 className="glow-orange text-lg mb-2">One-Shots</h2>
-                  <div className="text-sm text-gray-400 mb-2">Activate for a burst effect. Has cooldown.</div>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  <div className="section-header"><h2 className="glow-orange text-lg font-bold">One-Shots</h2></div>
+                  <div className="text-xs text-gray-400 mb-2 px-1">Activate for a burst effect. Has cooldown.</div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
                     {oneShotOMs.map(om => {
                       const cd = state.omCooldowns[om.id] || 0;
                       const isActive = (state.omActive[om.id] || 0) > 0;
@@ -623,7 +684,7 @@ export default function GamePage() {
                       return (
                         <button
                           key={om.id}
-                          className={`card text-left relative p-3 ${
+                          className={`card text-left relative ${
                             isActive
                               ? 'border-purple box-glow-purple'
                               : canUse
@@ -638,10 +699,10 @@ export default function GamePage() {
                             <span className="font-bold text-sm">{om.name}</span>
                           </div>
                           <div className="text-sm text-gray-400 mt-1">{om.desc}</div>
-                          <div className="flex justify-between mt-2 text-sm">
-                            <span className="text-orange">{om.energyCost}E</span>
-                            <span className="text-gray-400">{om.duration > 0 ? `${om.duration}s` : 'Once/run'}</span>
-                            <span className={cd > 0 ? 'text-red' : 'text-green'}>
+                          <div className="flex gap-2 mt-2 flex-wrap">
+                            <span className="badge badge-orange">{om.energyCost}E</span>
+                            <span className="badge badge-cyan">{om.duration > 0 ? `${om.duration}s` : 'Once/run'}</span>
+                            <span className={`badge ${cd > 0 ? '' : 'badge-green'}`} style={cd > 0 ? {background: 'rgba(255,51,102,0.15)', color: 'var(--color-red)', border: '1px solid rgba(255,51,102,0.3)'} : undefined}>
                               {om.id === 'singularity_pull' && state.singularityUsed
                                 ? 'Used'
                                 : cd > 0
@@ -650,7 +711,7 @@ export default function GamePage() {
                             </span>
                           </div>
                           {isActive && (
-                            <div className="absolute top-2 right-2 text-sm text-purple font-bold">
+                            <div className="absolute top-2 right-2 badge badge-purple">
                               {state.omActive[om.id]?.toFixed(1)}s
                             </div>
                           )}
@@ -667,12 +728,17 @@ export default function GamePage() {
         {/* UPGRADES TAB */}
         {activeTab === 'upgrades' && (
           <div>
-            <h2 className="glow-orange text-lg mb-1">Core Upgrades</h2>
-            <div className="text-sm text-gray-400 mb-3">Shards: <span className="text-yellow">{fmt(state.currentShards)}</span></div>
+            <div className="section-header"><h2 className="glow-orange text-lg font-bold">Core Upgrades</h2></div>
+            <div className="flex items-center gap-2 mb-3 px-1">
+              <span className="text-sm text-gray-400">Shards:</span>
+              <span className="badge badge-yellow text-sm">{fmt(state.currentShards)} 💎</span>
+            </div>
             {(['foundation', 'synergy', 'density', 'energy'] as const).map(path => (
               <div key={path} className="mb-4">
-                <h3 className="text-sm font-bold text-gray-400 uppercase mb-2 tracking-wider">{path} Path</h3>
-                <div className="space-y-1">
+                <div className="section-header">
+                  <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider">{path} Path</h3>
+                </div>
+                <div className="space-y-2">
                   {CORE_UPGRADES.filter(u => u.path === path).map(u => {
                     const level = state.coreUpgrades[u.id] || 0;
                     const maxed = level >= u.maxLevel;
@@ -680,16 +746,20 @@ export default function GamePage() {
                     const canBuy = canPurchaseUpgrade(u, state);
                     return (
                       <div key={u.id} className={`card flex items-center justify-between ${maxed ? 'border-green opacity-70' : canBuy ? 'hover:border-orange' : 'opacity-40'}`}>
-                        <div>
-                          <span>{u.emoji} <span className="font-bold text-sm">{u.name}</span> <span className="text-xs text-gray-400">Lv.{level}/{u.maxLevel}</span></span>
-                          <div className="text-sm text-gray-400">{u.desc}</div>
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span>{u.emoji}</span>
+                            <span className="font-bold text-sm">{u.name}</span>
+                            <span className="badge badge-cyan">Lv.{level}/{u.maxLevel}</span>
+                          </div>
+                          <div className="text-sm text-gray-400 mt-0.5">{u.desc}</div>
                         </div>
                         {!maxed && (
-                          <button className="btn-secondary text-sm ml-2" disabled={!canBuy} onClick={() => handleUpgrade(u.id)}>
+                          <button className="btn-secondary text-sm ml-3 shrink-0" disabled={!canBuy} onClick={() => handleUpgrade(u.id)}>
                             {fmt(cost)} 💎
                           </button>
                         )}
-                        {maxed && <span className="text-sm text-green">MAX</span>}
+                        {maxed && <span className="badge badge-green">MAX</span>}
                       </div>
                     );
                   })}
@@ -702,15 +772,27 @@ export default function GamePage() {
         {/* PRESTIGE TAB */}
         {activeTab === 'prestige' && (
           <div>
-            <h2 className="glow-cyan text-lg mb-3">Prestige</h2>
+            <div className="section-header"><h2 className="glow-cyan text-lg font-bold">Prestige</h2></div>
             <div className="card mb-4">
-              <div className="text-sm">Current Tier: <span className="glow-cyan font-bold">{currentTierDef.emoji} {currentTierDef.name}</span></div>
-              <div className="text-sm mt-1">Lifetime Shards: <span className="text-yellow">{fmt(state.lifetimeShards)}</span></div>
-              <div className="text-sm mt-1">Available Shards: <span className="text-yellow">{fmt(state.currentShards)}</span></div>
-              <div className="text-sm mt-1">Total Prestiges: {state.totalPrestigeCount}</div>
+              <div className="stat-row">
+                <span className="text-sm text-gray-400">Current Tier</span>
+                <span className="glow-cyan font-bold">{currentTierDef.emoji} {currentTierDef.name}</span>
+              </div>
+              <div className="stat-row">
+                <span className="text-sm text-gray-400">Lifetime Shards</span>
+                <span className="badge badge-yellow">{fmt(state.lifetimeShards)}</span>
+              </div>
+              <div className="stat-row">
+                <span className="text-sm text-gray-400">Available Shards</span>
+                <span className="badge badge-yellow">{fmt(state.currentShards)}</span>
+              </div>
+              <div className="stat-row">
+                <span className="text-sm text-gray-400">Total Prestiges</span>
+                <span className="text-neon font-bold">{state.totalPrestigeCount}</span>
+              </div>
               {nextTierDef && (
-                <div className="mt-2">
-                  <div className="text-sm text-gray-400">Next: {nextTierDef.emoji} {nextTierDef.name} — {fmt(nextTierDef.shardReq)} lifetime shards</div>
+                <div className="mt-3 pt-2 border-t border-gray-700">
+                  <div className="text-sm text-gray-400 mb-1">Next: <span className="font-bold text-white">{nextTierDef.emoji} {nextTierDef.name}</span> — {fmt(nextTierDef.shardReq)} lifetime shards</div>
                   <div className="resource-bar mt-1">
                     <div className="resource-bar-fill bg-yellow" style={{width: `${Math.min(100, (state.lifetimeShards / nextTierDef.shardReq) * 100)}%`}} />
                   </div>
@@ -718,17 +800,26 @@ export default function GamePage() {
               )}
             </div>
             <div className="card mb-4">
-              <div className="text-sm">Run Mass: <span className="glow-cyan">{fmt(state.runMassEarned)}</span></div>
-              <div className="text-sm mt-1">Shards on Prestige: <span className="text-yellow font-bold">{fmt(shardsOnPrestige)}</span></div>
+              <div className="stat-row">
+                <span className="text-sm text-gray-400">Run Mass</span>
+                <span className="glow-cyan font-bold">{fmt(state.runMassEarned)}</span>
+              </div>
+              <div className="stat-row">
+                <span className="text-sm text-gray-400">Shards on Prestige</span>
+                <span className="badge badge-yellow text-sm font-bold">{fmt(shardsOnPrestige)}</span>
+              </div>
               <button className="btn-primary mt-3 w-full" disabled={!canPrestige(state)} onClick={handlePrestige}>
                 {canPrestige(state) ? `Prestige for ${fmt(shardsOnPrestige)} Shards` : 'Need more mass to prestige'}
               </button>
-              <div className="text-sm text-gray-400 mt-2">Prestige resets mass, gravity, density, processes and orbital mechanics. Core upgrades and discoveries persist.</div>
+              <div className="text-xs text-gray-400 mt-2 px-1">Prestige resets mass, gravity, density, processes and orbital mechanics. Core upgrades and discoveries persist.</div>
             </div>
             {state.composition && (
               <div className="card">
-                <div className="text-sm mb-2">Current Composition: <span className="font-bold">{COMPOSITIONS.find(c => c.id === state.composition)?.name}</span></div>
-                <div className="text-sm text-gray-400">You can change composition when you prestige.</div>
+                <div className="stat-row">
+                  <span className="text-sm text-gray-400">Composition</span>
+                  <span className="badge badge-purple">{COMPOSITIONS.find(c => c.id === state.composition)?.name}</span>
+                </div>
+                <div className="text-xs text-gray-400 mt-1 px-1">You can change composition when you prestige.</div>
               </div>
             )}
           </div>
@@ -737,34 +828,36 @@ export default function GamePage() {
         {/* DISCOVER TAB */}
         {activeTab === 'discover' && (
           <div>
-            <h2 className="glow-orange text-lg mb-3">Discoveries</h2>
-            <div className="text-sm text-gray-400 mb-3">{state.discoveries.length}/{DISCOVERIES.length} discovered</div>
-            {/* Regular discoveries (non-hidden always show) */}
-            <div className="space-y-2">
+            <div className="section-header"><h2 className="glow-orange text-lg font-bold">Discoveries</h2></div>
+            <div className="flex items-center gap-2 mb-3 px-1">
+              <span className="text-sm text-gray-400">Found:</span>
+              <span className="badge badge-orange">{state.discoveries.length}/{DISCOVERIES.length}</span>
+            </div>
+            <div className="space-y-2.5">
               {DISCOVERIES.filter(d => !d.hidden).map(d => {
                 const found = state.discoveries.includes(d.id);
                 return (
                   <div key={d.id} className={`card ${found ? 'border-orange' : 'opacity-40'}`}>
                     <div className="flex items-center gap-2">
-                      <span className="text-base">{found ? d.emoji : '❓'}</span>
+                      <span className="text-lg">{found ? d.emoji : '❓'}</span>
                       <span className="font-bold text-sm">{found ? d.name : '???'}</span>
                     </div>
                     <div className="text-sm text-gray-400 mt-1">{found ? d.desc : d.hint}</div>
-                    {found && <div className="text-sm text-orange mt-0.5">{d.bonusDesc}</div>}
+                    {found && <div className="mt-1.5"><span className="badge badge-orange">{d.bonusDesc}</span></div>}
                   </div>
                 );
               })}
             </div>
-            {/* Hidden discoveries — only show found ones + count of remaining */}
-            <h3 className="text-sm font-bold text-gray-400 uppercase mt-4 mb-2 tracking-wider">Hidden Achievements</h3>
-            <div className="space-y-2">
+            <div className="glow-divider mt-4 mb-3" />
+            <div className="section-header"><h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider">Hidden Achievements</h3></div>
+            <div className="space-y-2.5">
               {DISCOVERIES.filter(d => d.hidden).map(d => {
                 const found = state.discoveries.includes(d.id);
                 if (!found) {
                   return (
                     <div key={d.id} className="card opacity-30">
                       <div className="flex items-center gap-2">
-                        <span className="text-base">🔒</span>
+                        <span className="text-lg">🔒</span>
                         <span className="font-bold text-sm">???</span>
                       </div>
                       <div className="text-sm text-gray-400 mt-1">Do something unexpected...</div>
@@ -772,14 +865,14 @@ export default function GamePage() {
                   );
                 }
                 return (
-                  <div key={d.id} className="card border-purple">
+                  <div key={d.id} className="card border-purple box-glow-purple">
                     <div className="flex items-center gap-2">
-                      <span className="text-base">{d.emoji}</span>
+                      <span className="text-lg">{d.emoji}</span>
                       <span className="font-bold text-sm">{d.name}</span>
-                      <span className="text-xs text-purple">SECRET</span>
+                      <span className="badge badge-purple">SECRET</span>
                     </div>
                     <div className="text-sm text-gray-400 mt-1">{d.desc}</div>
-                    <div className="text-sm text-purple mt-0.5">{d.bonusDesc}</div>
+                    <div className="mt-1.5"><span className="badge badge-purple">{d.bonusDesc}</span></div>
                   </div>
                 );
               })}
@@ -790,17 +883,17 @@ export default function GamePage() {
         {/* STATS TAB */}
         {activeTab === 'stats' && (
           <div>
-            <h2 className="glow-cyan text-lg mb-3">Statistics</h2>
-            <div className="card space-y-1 mb-4">
-              <div className="text-sm">Total Mass Earned: <span className="text-neon">{fmt(state.totalMassEarned)}</span></div>
-              <div className="text-sm">Highest Mass: <span className="text-neon">{fmt(state.highestMass)}</span></div>
-              <div className="text-sm">Total Clicks: <span className="text-neon">{fmt(state.totalClicks)}</span></div>
-              <div className="text-sm">Total Play Time: <span className="text-neon">{fmtTime(state.totalPlayTime)}</span></div>
-              <div className="text-sm">Run Time: <span className="text-neon">{fmtTime(state.runTime)}</span></div>
-              <div className="text-sm">Comets Caught: <span className="text-neon">{state.cometsCaught}</span></div>
-              <div className="text-sm">Prestige Count: <span className="text-neon">{state.totalPrestigeCount}</span></div>
+            <div className="section-header"><h2 className="glow-cyan text-lg font-bold">Statistics</h2></div>
+            <div className="card mb-4">
+              <div className="stat-row"><span className="text-sm text-gray-400">Total Mass Earned</span><span className="glow-cyan font-bold">{fmt(state.totalMassEarned)}</span></div>
+              <div className="stat-row"><span className="text-sm text-gray-400">Highest Mass</span><span className="text-neon font-bold">{fmt(state.highestMass)}</span></div>
+              <div className="stat-row"><span className="text-sm text-gray-400">Total Clicks</span><span className="text-neon font-bold">{fmt(state.totalClicks)}</span></div>
+              <div className="stat-row"><span className="text-sm text-gray-400">Total Play Time</span><span className="text-neon">{fmtTime(state.totalPlayTime)}</span></div>
+              <div className="stat-row"><span className="text-sm text-gray-400">Run Time</span><span className="text-neon">{fmtTime(state.runTime)}</span></div>
+              <div className="stat-row"><span className="text-sm text-gray-400">Comets Caught</span><span className="text-neon font-bold">{state.cometsCaught}</span></div>
+              <div className="stat-row"><span className="text-sm text-gray-400">Prestige Count</span><span className="text-neon font-bold">{state.totalPrestigeCount}</span></div>
             </div>
-            <h3 className="text-sm font-bold text-gray-400 mb-2">Settings</h3>
+            <div className="section-header"><h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider">Settings</h3></div>
             <div className="space-y-2">
               <button className="btn-secondary w-full text-sm" onClick={() => { saveGame(state); addToast('Game saved!', '💾'); }}>Manual Save</button>
               <button className="btn-secondary w-full text-sm" onClick={() => { const code = exportSave(state); navigator.clipboard.writeText(code); addToast('Save exported to clipboard!', '📋'); }}>Export Save</button>
@@ -821,7 +914,8 @@ export default function GamePage() {
                 }
               }}>Hard Reset</button>
             </div>
-            <h3 className="text-sm font-bold text-gray-400 mb-2 mt-4">Feedback</h3>
+            <div className="glow-divider mt-4 mb-3" />
+            <div className="section-header"><h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider">Feedback</h3></div>
             <div className="card">
               <FeedbackForm
                 state={state}
@@ -836,8 +930,25 @@ export default function GamePage() {
         )}
       </div>
 
+      {/* Floating Mini Asteroid — appears when scrolled on Build tab */}
+      {showMiniAsteroid && (
+        <div
+          className="mini-asteroid"
+          style={{
+            left: miniPos.x,
+            top: miniPos.y === -1 ? 'calc(50vh - 28px)' : miniPos.y,
+          }}
+          onMouseDown={handleDragStart}
+          onTouchStart={handleDragStart}
+          onClick={handleMiniClick}
+        >
+          <div className="mini-asteroid-inner pulse-glow">🪨</div>
+          <div className="mini-asteroid-mass">+{fmt(getClickValue(state, 1))}/tap</div>
+        </div>
+      )}
+
       {/* Toast notifications */}
-      <div className="fixed top-2 right-2 sm:top-4 sm:right-4 z-50 space-y-2 max-w-[90vw]">
+      <div className="fixed top-2 right-3 sm:top-4 sm:right-4 z-50 space-y-2 max-w-[90vw]">
         {toasts.map(t => (
           <SwipeableNotification key={t.id} notification={t} onDismiss={dismissToast} />
         ))}
@@ -846,11 +957,11 @@ export default function GamePage() {
       {/* Offline gains modal */}
       {offlineGains && (
         <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 px-4">
-          <div className="card max-w-sm w-full text-center mx-4">
+          <div className="card max-w-sm w-full text-center mx-4" style={{borderColor: 'var(--color-neon)', borderWidth: '2px'}}>
             <h2 className="glow-cyan text-lg mb-2">Welcome Back!</h2>
-            <div className="text-sm text-gray-400 mb-1">You were away for {fmtTime(offlineGains.time)}</div>
-            <div className="text-lg text-neon font-bold">+{fmt(offlineGains.mass)} mass</div>
-            <button className="btn-primary mt-4" onClick={() => setOfflineGains(null)}>Continue</button>
+            <div className="text-sm text-gray-400 mb-2">You were away for {fmtTime(offlineGains.time)}</div>
+            <div className="text-xl glow-cyan font-bold mb-1">+{fmt(offlineGains.mass)} mass</div>
+            <button className="btn-primary mt-4 w-full" onClick={() => setOfflineGains(null)}>Continue</button>
           </div>
         </div>
       )}
@@ -895,4 +1006,3 @@ export default function GamePage() {
     </div>
   );
 }
-
