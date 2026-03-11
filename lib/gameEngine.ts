@@ -305,24 +305,51 @@ export function processTick(state: GameState, dt: number): GameState {
   }
 
   // === AD BOOST TIMERS ===
+  // Shard ad: every 10-20 min, 60s expiry
   if (s.totalPrestigeCount >= 1 && !s.shardAdAvailable) {
     s.nextShardAdIn -= dt;
     if (s.nextShardAdIn <= 0) {
       s.shardAdAvailable = true;
+      s.shardAdExpiresIn = 60;
+    }
+  }
+  if (s.shardAdAvailable && !s.adsRemoved) {
+    s.shardAdExpiresIn -= dt;
+    if (s.shardAdExpiresIn <= 0) {
+      s.shardAdAvailable = false;
+      s.nextShardAdIn = 600 + Math.random() * 600;
     }
   }
 
+  // Production ad: every 30 min, 60s expiry
   if (!s.productionAdAvailable) {
     s.nextProductionAdIn -= dt;
     if (s.nextProductionAdIn <= 0) {
       s.productionAdAvailable = true;
+      s.productionAdExpiresIn = 60;
+    }
+  }
+  if (s.productionAdAvailable && !s.adsRemoved) {
+    s.productionAdExpiresIn -= dt;
+    if (s.productionAdExpiresIn <= 0) {
+      s.productionAdAvailable = false;
+      s.nextProductionAdIn = 1800;
     }
   }
 
+  // Mass drop ad: every 5-10 min, 60s expiry
   if (!s.massDropAdAvailable) {
     s.nextMassDropAdIn -= dt;
     if (s.nextMassDropAdIn <= 0) {
       s.massDropAdAvailable = true;
+      s.massDropAdExpiresIn = 60;
+    }
+  }
+  if (s.massDropAdAvailable && !s.adsRemoved) {
+    s.massDropAdExpiresIn -= dt;
+    if (s.massDropAdExpiresIn <= 0) {
+      s.massDropAdAvailable = false;
+      s.nextMassDropAdIn = 300 + Math.random() * 300;
     }
   }
 

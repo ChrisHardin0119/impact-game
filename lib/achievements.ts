@@ -193,6 +193,24 @@ export const ACHIEVEMENTS: AchievementDef[] = [
     hidden: true,
     check: (s) => s.mass >= 1000000000,
   },
+  {
+    id: 'click_frenzy',
+    name: 'Click Frenzy',
+    emoji: '🔥👆',
+    desc: 'Click 1,000 times in a single run.',
+    bonusDesc: '+15% click power',
+    hidden: true,
+    check: (s) => s.totalClicks >= 1000,
+  },
+  {
+    id: 'click_god',
+    name: 'Click God',
+    emoji: '⚡👆',
+    desc: 'Click 10,000 times.',
+    bonusDesc: '+75% click power',
+    hidden: true,
+    check: (s) => s.totalClicks >= 10000,
+  },
 ];
 
 // Get achievement bonus multipliers
@@ -231,6 +249,8 @@ export function getAchievementEffects(state: GameState): {
   if (a.includes('patience'))        all *= 1.02;
   if (a.includes('all_in'))          expulsion *= 1.03;
   if (a.includes('billionaire'))     all *= 1.02;
+  if (a.includes('click_frenzy'))    click *= 1.15;
+  if (a.includes('click_god'))       click *= 1.75;
 
   return { massMult: mass, velocityMult: velocity, energyMult: energy, clickMult: click, shardMult: shard, cometMult: comet, expulsionMult: expulsion, accumulationMult: accumulation, allMult: all };
 }

@@ -31,6 +31,8 @@ export default function GamePage() {
   const [importCode, setImportCode] = useState('');
   const [showImportExport, setShowImportExport] = useState(false);
   const [showResetConfirm, setShowResetConfirm] = useState(false);
+  const [adPopup, setAdPopup] = useState<string | null>(null); // 'production' | 'shard' | 'mass' | 'noads' | null
+  const [showNoAdsPurchase, setShowNoAdsPurchase] = useState(false);
 
   // Expulsion tab state
   const [expulsionPercent, setExpulsionPercent] = useState(10);
@@ -285,7 +287,8 @@ export default function GamePage() {
     const s = stateRef.current;
     if (!s.shardAdAvailable) return;
     const bonus = Math.max(1, Math.floor(s.lifetimeShards * 0.1));
-    setState({ ...s, currentShards: s.currentShards + bonus, lifetimeShards: s.lifetimeShards + bonus, shardAdAvailable: false, nextShardAdIn: 600 + Math.random() * 600 });
+    setState({ ...s, currentShards: s.currentShards + bonus, lifetimeShards: s.lifetimeShards + bonus, shardAdAvailable: false, nextShardAdIn: 600 + Math.random() * 600, shardAdExpiresIn: 0 });
+    setAdPopup(null);
   }, [setState]);
 
   const handleProductionAd = useCallback(() => {
@@ -295,8 +298,10 @@ export default function GamePage() {
       ...s,
       activeBoosts: { ...s.activeBoosts, productionDouble: { active: true, endsAt: Date.now() + 30 * 60 * 1000 } },
       productionAdAvailable: false,
-      nextProductionAdIn: 900 + Math.random() * 900,
+      nextProductionAdIn: 1800,
+      productionAdExpiresIn: 0,
     });
+    setAdPopup(null);
   }, [setState]);
 
   const handleMassDropAd = useCallback(() => {
@@ -311,7 +316,16 @@ export default function GamePage() {
       totalMassEarned: s.totalMassEarned + drop,
       massDropAdAvailable: false,
       nextMassDropAdIn: 300 + Math.random() * 300,
+      massDropAdExpiresIn: 0,
     });
+    setAdPopup(null);
+  }, [setState]);
+
+  const handleRemoveAds = useCallback(() => {
+    const s = stateRef.current;
+    setState({ ...s, adsRemoved: true });
+    setShowNoAdsPurchase(false);
+    setAdPopup(null);
   }, [setState]);
 
   const handleDevPasscode = useCallback(() => {
@@ -519,6 +533,11 @@ export default function GamePage() {
           <div className="flex items-center gap-2">
             {isProductionBoosted && <span className="badge badge-green">2x {fmtTime(boostTimeLeft)}</span>}
             {state.currentShards > 0 && <span className="badge badge-orange">💎 {fmt(state.currentShards)}</span>}
+            {!state.adsRemoved && (
+              <button className="no-ads-btn" onClick={() => setShowNoAdsPurchase(true)} title="Remove Ads">
+                <span style={{ fontSize: '0.65rem', lineHeight: 1 }}>🚫</span>
+              </button>
+            )}
           </div>
         </div>
         <div className="grid grid-cols-3 gap-2">
@@ -540,24 +559,75 @@ export default function GamePage() {
         </div>
       </div>
 
-      {/* === AD BOOST BAR === */}
-      {(state.shardAdAvailable || state.productionAdAvailable || state.massDropAdAvailable) && (
-        <div className="flex gap-1 px-2 py-1 overflow-x-auto no-scrollbar" style={{ background: 'rgba(10,10,26,0.8)' }}>
-          {state.massDropAdAvailable && (
-            <button onClick={handleMassDropAd} className="badge badge-cyan whitespace-nowrap cursor-pointer hover:opacity-80">
-              📺 Mass Drop (+{fmtKg(Math.max(100, getMassPerSecond(state) * 300))})
-            </button>
-          )}
-          {state.productionAdAvailable && (
-            <button onClick={handleProductionAd} className="badge badge-green whitespace-nowrap cursor-pointer hover:opacity-80">
-              📺 2x Production (30m)
-            </button>
-          )}
-          {state.shardAdAvailable && (
-            <button onClick={handleShardAd} className="badge badge-orange whitespace-nowrap cursor-pointer hover:opacity-80">
-              📺 +{fmt(Math.max(1, Math.floor(state.lifetimeShards * 0.1)))} Shards
-            </button>
-          )}
+      {/* === FLOATING AD BUTTONS (positioned in negative space, left edge) === */}
+      {state.productionAdAvailable && (
+        <div className="ad-float-btn ad-float-btn-production" style={{ left: 8, top: '35%' }}
+          onClick={() => adPopup === 'production' ? handleProductionAd() : setAdPopup('production')}>
+          <span style={{ fontSize: '1rem', fontWeight: 900 }}>2x</span>
+          <span style={{ fontSize: '0.5rem' }}>✦✦✦</span>
+          {!state.adsRemoved && <div className="ad-timer" style={{ color: '#ffcc00' }}>{Math.ceil(state.productionAdExpiresIn)}s</div>}
+        </div>
+      )}
+      {state.shardAdAvailable && (
+        <div className="ad-float-btn ad-float-btn-shard" style={{ left: 8, top: '50%' }}
+          onClick={() => adPopup === 'shard' ? handleShardAd() : setAdPopup('shard')}>
+          <span style={{ fontSize: '1.1rem' }}>💎</span>
+          {!state.adsRemoved && <div className="ad-timer" style={{ color: 'var(--color-orange)' }}>{Math.ceil(state.shardAdExpiresIn)}s</div>}
+        </div>
+      )}
+      {state.massDropAdAvailable && (
+        <div className="ad-float-btn ad-float-btn-mass" style={{ left: 8, top: '65%' }}
+          onClick={() => adPopup === 'mass' ? handleMassDropAd() : setAdPopup('mass')}>
+          <span style={{ fontSize: '1.1rem' }}>📦</span>
+          {!state.adsRemoved && <div className="ad-timer" style={{ color: 'var(--color-neon)' }}>{Math.ceil(state.massDropAdExpiresIn)}s</div>}
+        </div>
+      )}
+
+      {/* === AD INFO POPUP === */}
+      {adPopup && (
+        <div className="fixed inset-0 z-[49]" onClick={() => setAdPopup(null)}>
+          <div className="ad-popup" style={{ left: 72, top: adPopup === 'production' ? '33%' : adPopup === 'shard' ? '48%' : adPopup === 'mass' ? '63%' : '33%' }}
+            onClick={e => e.stopPropagation()}>
+            {adPopup === 'production' && <>
+              <div className="font-bold text-sm mb-1" style={{ color: '#ffcc00' }}>⭐ 2x Production</div>
+              <div className="text-xs text-[var(--color-gray-400)] mb-2">Doubles ALL production (mass, velocity, energy) for 30 minutes!</div>
+              <button onClick={handleProductionAd} className="btn-primary w-full text-xs">{state.adsRemoved ? 'Activate!' : '📺 Watch Ad'}</button>
+            </>}
+            {adPopup === 'shard' && <>
+              <div className="font-bold text-sm mb-1" style={{ color: 'var(--color-orange)' }}>💎 Bonus Shards</div>
+              <div className="text-xs text-[var(--color-gray-400)] mb-2">Get +{fmt(Math.max(1, Math.floor(state.lifetimeShards * 0.1)))} shards (10% of your lifetime total)!</div>
+              <button onClick={handleShardAd} className="btn-primary w-full text-xs">{state.adsRemoved ? 'Collect!' : '📺 Watch Ad'}</button>
+            </>}
+            {adPopup === 'mass' && <>
+              <div className="font-bold text-sm mb-1" style={{ color: 'var(--color-neon)' }}>📦 Mass Drop</div>
+              <div className="text-xs text-[var(--color-gray-400)] mb-2">Instant +{fmtKg(Math.max(100, getMassPerSecond(state) * 300))} mass (5 min of production)!</div>
+              <button onClick={handleMassDropAd} className="btn-primary w-full text-xs">{state.adsRemoved ? 'Collect!' : '📺 Watch Ad'}</button>
+            </>}
+          </div>
+        </div>
+      )}
+
+      {/* === NO ADS PURCHASE MODAL === */}
+      {showNoAdsPurchase && (
+        <div className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4" onClick={() => setShowNoAdsPurchase(false)}>
+          <div className="card box-glow-purple p-6 max-w-sm text-center" onClick={e => e.stopPropagation()}>
+            <div className="text-3xl mb-2">🚫📺</div>
+            <div className="text-lg font-bold mb-2 glow-cyan">Remove Ads — $5</div>
+            <div className="text-[var(--color-gray-400)] text-xs mb-3" style={{ lineHeight: '1.6' }}>
+              All 3 ad bonuses still appear on the same schedule, but you collect them instantly with a single tap — no ads to watch!
+            </div>
+            <div className="space-y-1 text-left text-xs mb-4" style={{ color: 'var(--color-green)' }}>
+              <div>✅ 2x Production (30 min) — instant</div>
+              <div>✅ Bonus Shards — instant</div>
+              <div>✅ Mass Drops — instant</div>
+              <div>✅ No expiry timer pressure</div>
+            </div>
+            <div className="flex gap-3">
+              <button onClick={() => setShowNoAdsPurchase(false)} className="btn-secondary flex-1">Cancel</button>
+              <button onClick={handleRemoveAds} className="btn-primary flex-1"
+                style={{ background: 'linear-gradient(135deg, #006644, var(--color-green))', borderColor: 'var(--color-green)' }}>Buy $5</button>
+            </div>
+          </div>
         </div>
       )}
 
@@ -934,9 +1004,10 @@ export default function GamePage() {
               <button onClick={() => { const s = stateRef.current; setState({ ...s, mass: s.mass + 1e12, totalMassEarned: s.totalMassEarned + 1e12, runMassEarned: s.runMassEarned + 1e12 }); }} className="btn-secondary text-xs">+1T Mass (run)</button>
               <button onClick={() => setState({ ...stateRef.current, expulsionCooldown: 0 })} className="btn-secondary text-xs">Reset Cooldown</button>
               <button onClick={() => { const s = stateRef.current; const all: Record<string, boolean> = {}; TAB_UNLOCKS.forEach(t => all[t.tabId] = true); setState({ ...s, unlockedTabs: { ...s.unlockedTabs, ...all } }); }} className="btn-secondary text-xs col-span-2">Unlock All Tabs</button>
-              <button onClick={() => setState({ ...stateRef.current, shardAdAvailable: true, productionAdAvailable: true, massDropAdAvailable: true })} className="btn-secondary text-xs col-span-2">Force All Ads</button>
+              <button onClick={() => setState({ ...stateRef.current, shardAdAvailable: true, productionAdAvailable: true, massDropAdAvailable: true, shardAdExpiresIn: 60, productionAdExpiresIn: 60, massDropAdExpiresIn: 60 })} className="btn-secondary text-xs col-span-2">Force All Ads</button>
+              <button onClick={() => setState({ ...stateRef.current, adsRemoved: !stateRef.current.adsRemoved })} className="btn-secondary text-xs col-span-2">Toggle No Ads ({stateRef.current.adsRemoved ? 'ON' : 'OFF'})</button>
             </div>
-            <div className="text-[var(--color-gray-600)] text-xs mt-3 text-center">v13.2 — QoL + UI overhaul</div>
+            <div className="text-[var(--color-gray-600)] text-xs mt-3 text-center">v13.3 — Floating ads + hidden achievements</div>
           </>
         )}
       </div>

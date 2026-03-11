@@ -99,6 +99,9 @@ export interface GameState {
   shardAdAvailable: boolean;
   productionAdAvailable: boolean;
   massDropAdAvailable: boolean;
+  shardAdExpiresIn: number;
+  productionAdExpiresIn: number;
+  massDropAdExpiresIn: number;
 
   // Dev mode
   devMode: boolean;

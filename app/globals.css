@@ -582,4 +582,92 @@ body {
 
 /* Hide scrollbar on tab bar */
 .no-scrollbar { scrollbar-width: none; -ms-overflow-style: none; }
+
+/* Floating ad buttons */
+.ad-float-btn {
+  position: fixed;
+  z-index: 45;
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  border: 2px solid;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  cursor: pointer;
+  transition: transform 0.15s, box-shadow 0.15s;
+  animation: ad-pulse 2s ease-in-out infinite;
+}
+.ad-float-btn:hover { transform: scale(1.12); }
+.ad-float-btn-production {
+  background: radial-gradient(circle, #443300 0%, #221800 100%);
+  border-color: #ffcc00;
+  box-shadow: 0 0 12px rgba(255,204,0,0.5), 0 0 24px rgba(255,204,0,0.2);
+  color: #ffcc00;
+}
+.ad-float-btn-shard {
+  background: radial-gradient(circle, #332200 0%, #1a0e00 100%);
+  border-color: var(--color-orange);
+  box-shadow: 0 0 12px rgba(255,107,43,0.5), 0 0 24px rgba(255,107,43,0.2);
+  color: var(--color-orange);
+}
+.ad-float-btn-mass {
+  background: radial-gradient(circle, #003333 0%, #001a1a 100%);
+  border-color: var(--color-neon);
+  box-shadow: 0 0 12px rgba(0,240,255,0.5), 0 0 24px rgba(0,240,255,0.2);
+  color: var(--color-neon);
+}
+.ad-float-btn .ad-timer {
+  position: absolute;
+  bottom: -16px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 0.6rem;
+  white-space: nowrap;
+  background: rgba(10,10,26,0.9);
+  padding: 1px 5px;
+  border-radius: 6px;
+  font-weight: bold;
+}
+@keyframes ad-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.7; }
+}
+
+/* No-ads button */
+.no-ads-btn {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--color-red);
+  border: 1.5px solid #ff6688;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  font-size: 0.55rem;
+  color: white;
+  font-weight: bold;
+  transition: transform 0.15s;
+  position: relative;
+}
+.no-ads-btn:hover { transform: scale(1.15); }
+
+/* Ad info popup */
+.ad-popup {
+  position: fixed;
+  z-index: 50;
+  background: rgba(10,10,26,0.97);
+  border: 1px solid var(--color-gray-600);
+  border-radius: 10px;
+  padding: 12px 16px;
+  max-width: 240px;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.6);
+  animation: popup-in 0.2s ease-out;
+}
+@keyframes popup-in {
+  0% { opacity: 0; transform: scale(0.9); }
+  100% { opacity: 1; transform: scale(1); }
+}
 .no-scrollbar::-webkit-scrollbar { display: none; }
