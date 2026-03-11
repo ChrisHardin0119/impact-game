@@ -842,6 +842,14 @@ export default function GamePage() {
               <div className="text-2xl font-bold glow-orange mb-1">💎 {fmt(state.currentShards)}</div>
               <div className="text-[var(--color-gray-400)] text-xs">Lifetime: {fmt(state.lifetimeShards)} shards</div>
             </div>
+            {/* Explain what Impact/Shards are before first impact */}
+            {state.totalPrestigeCount === 0 && (
+              <div className="card mb-3 text-xs text-[var(--color-gray-400)]" style={{ lineHeight: '1.7', borderColor: 'var(--color-purple)' }}>
+                <div className="font-bold text-sm mb-1 glow-purple">What is Impact?</div>
+                Impact resets your mass, velocity, buildings, and energy upgrades — but rewards you with 💎 <span style={{ color: 'var(--color-orange)' }}>Shards</span>, a permanent currency.
+                Use shards to unlock new tabs, buy permanent upgrades, and reach higher tiers. The more mass you earn in a run, the more shards you get!
+              </div>
+            )}
             <div className="card text-center mb-3">
               <div className="text-sm text-[var(--color-gray-400)] mb-2">Run mass earned: {fmtKg(state.runMassEarned)}</div>
               {canPrestige(state) ? (
@@ -852,7 +860,14 @@ export default function GamePage() {
                     💥 IMPACT!</button>
                 </>
               ) : (
-                <div className="text-[var(--color-gray-500)] text-sm">Need {fmtKg(10000)} run mass to Impact<br/>(have {fmtKg(state.runMassEarned)})</div>
+                <>
+                  <div className="text-[var(--color-gray-500)] text-sm mb-1">Need {fmtKg(10000)} run mass to Impact<br/>(have {fmtKg(state.runMassEarned)})</div>
+                  {state.runMassEarned > 0 && (
+                    <div className="text-xs" style={{ color: 'var(--color-orange)' }}>
+                      Would earn: ~{fmt(calcShards(Math.max(state.runMassEarned, 10000), state.currentTier))} shards
+                    </div>
+                  )}
+                </>
               )}
             </div>
             <div className="section-header"><span className="text-sm text-[var(--color-gray-400)]">Tab Unlocks</span></div>
@@ -884,8 +899,14 @@ export default function GamePage() {
                         ) : canBuy ? (
                           <button onClick={() => handleBuyTabUnlock(unlock.tabId)} className="btn-primary text-xs">💎 {fmt(unlock.shardCost)}</button>
                         ) : (
-                          <span className="text-[var(--color-gray-500)] text-xs">
-                            {state.totalPrestigeCount < unlock.requiresPrestige ? `Need ${unlock.requiresPrestige} impacts` : `💎 ${fmt(unlock.shardCost)}`}</span>
+                          <div className="text-[var(--color-gray-500)] text-xs text-right" style={{ lineHeight: '1.5' }}>
+                            {state.totalPrestigeCount < unlock.requiresPrestige && (
+                              <div>{state.totalPrestigeCount}/{unlock.requiresPrestige} impacts</div>
+                            )}
+                            {unlock.shardCost > 0 && (
+                              <div className={state.currentShards >= unlock.shardCost ? 'text-[var(--color-green)]' : ''}>💎 {fmt(unlock.shardCost)} shards</div>
+                            )}
+                          </div>
                         )}
                       </div>
                     )}

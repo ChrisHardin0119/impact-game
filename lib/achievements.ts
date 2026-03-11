@@ -197,19 +197,19 @@ export const ACHIEVEMENTS: AchievementDef[] = [
     id: 'click_frenzy',
     name: 'Click Frenzy',
     emoji: '🔥👆',
-    desc: 'Click 1,000 times in a single run.',
+    desc: 'Reach a 1,000 click combo.',
     bonusDesc: '+15% click power',
     hidden: true,
-    check: (s) => s.totalClicks >= 1000,
+    check: (s) => s.maxComboReached >= 1000,
   },
   {
     id: 'click_god',
     name: 'Click God',
     emoji: '⚡👆',
-    desc: 'Click 10,000 times.',
+    desc: 'Reach a 10,000 click combo.',
     bonusDesc: '+75% click power',
     hidden: true,
-    check: (s) => s.totalClicks >= 10000,
+    check: (s) => s.maxComboReached >= 10000,
   },
 ];
 
