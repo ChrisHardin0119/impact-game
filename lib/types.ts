@@ -1,184 +1,20 @@
 // ============================================================
-// IMPACT v2 — All TypeScript Interfaces
+// IMPACT v13 — Complete type system rewrite
+// Resource chain: Mass (Kg) → Density → Velocity → Energy
 // ============================================================
 
-export type CompositionId = 'silicate' | 'iron' | 'ice' | 'carbonaceous' | 'binary' | 'neutron';
-export type ProcessCategory = 'active' | 'passive' | 'resonant' | 'exotic';
+export type TabName = 'metals' | 'density' | 'velocity' | 'energy' | 'converter' | 'impact' | 'achievements' | 'stats' | 'dev';
+export type BuyMode = 1 | 10 | 100 | 'max';
 export type PrestigeTier = 0 | 1 | 2 | 3 | 4 | 5;
-export type TabName = 'build' | 'orbital' | 'upgrades' | 'prestige' | 'discover' | 'stats' | 'forge' | 'dev';
-export type BuyMode = 1 | 5 | 10 | 100 | 'max';
-export type UpgradePath = 'synergy' | 'density' | 'energy';
 
-// --- Compositions ---
-export interface CompositionDef {
-  id: CompositionId;
-  name: string;
-  emoji: string;
-  desc: string;
-  flavor: string;
-  unlockTier: PrestigeTier;
-  // Modifiers (1.0 = no change)
-  massProductionMult: number;
-  costMult: number;
-  gravityMult: number;
-  densityMult: number;
-  synergyMult: number;
-  clickMult: number;
-  // Special mechanic description
-  specialName: string;
-  specialDesc: string;
-}
-
-// --- Processes (buildings) ---
-export interface ProcessDef {
-  id: string;
-  name: string;
-  emoji: string;
-  desc: string;
-  category: ProcessCategory;
-  baseCost: number;
-  costScale: number; // typically 1.15
-  baseMPS: number;   // mass per second
-  gravityPS: number; // gravity per second
-  densityPS: number; // density per second (as %)
-  synergyTarget: string | null; // id of process it synergizes with
-  compositionBonus: CompositionId | null; // which composition boosts this
-  unlockCondition: { type: 'mass' | 'tier' | 'gravity'; value: number } | null;
-}
-
-// --- Orbital Mechanics (toggle or one-shot abilities) ---
-export interface OrbitalMechanicDef {
-  id: string;
-  name: string;
-  emoji: string;
-  desc: string;
-  isToggle: boolean;       // true = energy drain per sec; false = one-shot
-  energyCost: number;      // startup cost (toggles) or activation cost (one-shots)
-  energyDrain: number;     // energy per second while toggled ON (0 for one-shots)
-  cooldown: number;        // seconds (one-shots only, 0 for toggles)
-  duration: number;        // seconds (one-shots only, 0 for toggles/instant)
-  unlockTier: PrestigeTier;
-}
-
-// --- Core Upgrades ---
-export interface CoreUpgradeDef {
-  id: string;
-  name: string;
-  emoji: string;
-  desc: string;
-  path: UpgradePath | 'foundation';
-  cost: number; // shards
-  maxLevel: number;
-  requires: string[]; // ids of prerequisite upgrades
-  unlockTier: PrestigeTier;
-}
-
-// --- Discoveries ---
-export interface DiscoveryDef {
-  id: string;
-  name: string;
-  emoji: string;
-  desc: string;
-  hint: string;
-  bonusDesc: string;
-  // condition is checked in engine
-}
-
-// --- Prestige Tier Info ---
-export interface PrestigeTierDef {
-  tier: PrestigeTier;
-  name: string;
-  emoji: string;
-  shardReq: number; // lifetime shards needed to unlock this tier
-  unlockDesc: string;
-}
-
-// --- Game State ---
-export interface GameState {
-  // Resources
-  mass: number;
-  gravity: number;
-  density: number;
-  energy: number;
-  maxEnergy: number;
-  energyRegen: number;
-
-  // Composition
-  composition: CompositionId | null; // null = not yet chosen (Rock stage)
-
-  // Processes (buildings) owned
-  processes: Record<string, number>; // processId -> count
-
-  // Orbital mechanic cooldowns (seconds remaining, one-shots)
-  omCooldowns: Record<string, number>;
-  // Active orbital mechanic effects (seconds remaining, one-shots)
-  omActive: Record<string, number>;
-  // Toggle states (which toggles are currently ON)
-  omToggles: Record<string, boolean>;
-  // Whether singularity pull was used this run
-  singularityUsed: boolean;
-
-  // Core Upgrades (permanent, persist through prestige)
-  coreUpgrades: Record<string, number>; // upgradeId -> level
-
-  // Discoveries (permanent)
-  discoveries: string[]; // ids of discovered bonuses
-
-  // Prestige
-  currentTier: PrestigeTier;
-  lifetimeShards: number;
-  currentShards: number; // available to spend
-  totalPrestigeCount: number;
-
-  // Stats
-  totalMassEarned: number;
-  totalClicks: number;
-  runMassEarned: number;
-  runTime: number; // seconds
-  totalPlayTime: number;
-  highestMass: number;
-  cometsCaught: number;
-
-  // Comet system (for Ice composition)
-  nextCometIn: number; // seconds until next comet event
-  activeComets: ActiveComet[]; // comets on screen waiting to be tapped
-
-  // Charged buildings (for Carbonaceous composition)
-  chargedProcess: string | null;
-  chargeCooldown: number;
-
-  // Forge system — spend gravity/density for permanent bonuses
-  forgeLevels: Record<string, number>; // id -> level purchased
-
-  // UI
-  activeTab: TabName;
-  buyMode: BuyMode;
-
-  // Tutorial
-  tutorialCompleted: string[]; // IDs of completed tutorial steps
-  tutorialSkipped: boolean;
-
-  // Ads & Boosts
-  adsRemoved: boolean;
-  boosts: {
-    productionBoost: { active: boolean; endsAt: number };   // 2x production for 30 min
-    prestigeDouble: { active: boolean; usedThisRun: boolean }; // 2x shards next prestige
-    massDrop: { lastUsed: number };  // timestamp of last use
-  };
-
-  // Achievement tracking
-  soundToggles: number;        // rapid sound on/off count (for "Indecisive")
-  omUsedThisRun: boolean;      // whether any OM was used this run
-  fastestPrestige: number;     // fastest prestige time in seconds
-  totalOrbitalToggles: number; // total times toggles flipped
-  maxComboReached: number;     // highest click combo achieved
-
-  // Developer mode
-  devMode: boolean;
-
-  // Meta
-  lastSaveTime: number;
-  version: number;
+export interface ActiveComet {
+  id: number;
+  value: number;
+  x: number;
+  y: number;
+  timeLeft: number;
+  speed: number;
+  angle: number;
 }
 
 export interface FloatingNumber {
@@ -189,25 +25,190 @@ export interface FloatingNumber {
   opacity: number;
 }
 
-export interface Toast {
-  id: number;
-  message: string;
+export interface AchievementPopup {
+  id: string;
+  name: string;
   emoji: string;
-  timeLeft: number;
+  desc: string;
+  bonusDesc: string;
 }
 
-export interface CometEvent {
-  id: number;
-  value: number;
-  timeLeft: number;
+// === GAME STATE ===
+export interface GameState {
+  // Primary resources
+  mass: number;          // Kg
+  density: number;       // linked to mass
+  velocity: number;      // m/s — earned from density tab
+  energy: number;        // J — earned from velocity tab
+
+  // Building counts
+  metals: Record<string, number>;
+  densityItems: Record<string, number>;
+  velocityItems: Record<string, number>;
+
+  // Energy upgrades (level or toggle state)
+  energyUpgrades: Record<string, number>;
+
+  // Tab unlocks (permanent, bought with shards)
+  unlockedTabs: Record<string, boolean>;
+
+  // Shard upgrades (permanent small bonuses)
+  shardUpgrades: Record<string, number>;
+
+  // Prestige / Impact
+  currentShards: number;
+  lifetimeShards: number;
+  totalPrestigeCount: number;
+  currentTier: PrestigeTier;
+
+  // Achievements (permanent)
+  achievements: string[];
+
+  // Composition (chosen at start / after Impact)
+  composition: string | null;
+
+  // Run tracking
+  runMassEarned: number;
+  totalMassEarned: number;
+  highestMass: number;
+  totalClicks: number;
+  totalPlayTime: number;
+  runTime: number;
+  cometsCaught: number;
+  converterUseCount: number;
+  tabSwitchCount: number;
+
+  // Comets
+  activeComets: ActiveComet[];
+  nextCometIn: number;
+
+  // UI state
+  activeTab: TabName;
+  buyMode: BuyMode;
+
+  // Ad boosts
+  activeBoosts: {
+    velocityDouble: { active: boolean; endsAt: number };
+  };
+  nextShardAdIn: number;
+  nextVelocityAdIn: number;
+  shardAdAvailable: boolean;
+  velocityAdAvailable: boolean;
+
+  // Dev mode
+  devMode: boolean;
+
+  // Tutorial
+  tutorialCompleted: string[];
+  tutorialSkipped: boolean;
+
+  // Velocity tab unlock (special: threshold-based, not shard-based)
+  velocityUnlockReady: boolean; // true = player hit threshold & pressed button, awaiting Impact
+
+  // Misc tracking
+  fastestPrestige: number;
+  maxComboReached: number;
+  lastClickTime: number;
+  idleStreak: number;
+  adsRemoved: boolean;
+
+  // Meta
+  lastSaveTime: number;
+  version: number;
 }
 
-export interface ActiveComet {
-  id: number;
-  value: number;
-  x: number; // percentage 0-100 for horizontal position
-  y: number; // percentage 0-100 for vertical position
-  timeLeft: number; // seconds before it expires
-  speed: number; // drift speed
-  angle: number; // drift direction in radians
+// === BUILDING DEFINITIONS ===
+export interface BuildingDef {
+  id: string;
+  name: string;
+  emoji: string;
+  desc: string;
+  tab: 'metals' | 'density' | 'velocity';
+  costResource: 'mass' | 'density' | 'velocity';
+  baseCost: number;
+  costScale: number;
+  produces: { resource: 'mass' | 'density' | 'velocity' | 'energy'; baseAmount: number }[];
+}
+
+// === ENERGY UPGRADE DEFINITIONS ===
+export interface EnergyUpgradeDef {
+  id: string;
+  name: string;
+  emoji: string;
+  desc: string;
+  baseCost: number;
+  costScale: number;
+  maxLevel: number;
+  isToggle: boolean;
+  effect: string;
+}
+
+// === ACHIEVEMENT DEFINITIONS ===
+export interface AchievementDef {
+  id: string;
+  name: string;
+  emoji: string;
+  desc: string;
+  bonusDesc: string;
+  hidden: boolean;
+  check: (state: GameState) => boolean;
+}
+
+// === SHARD UPGRADE DEFINITIONS ===
+export interface ShardUpgradeDef {
+  id: string;
+  name: string;
+  emoji: string;
+  desc: string;
+  baseCost: number;
+  costScale: number;
+  maxLevel: number;
+  effect: string;
+}
+
+// === TAB UNLOCK DEFINITIONS ===
+export interface TabUnlockDef {
+  tabId: TabName;
+  name: string;
+  emoji: string;
+  desc: string;
+  shardCost: number;
+  requiresPrestige: number;
+  // Special unlock: velocity tab uses a resource threshold instead of shards
+  velocityThreshold?: number;
+  unlockViaImpact?: boolean;
+}
+
+// === CONVERTER DEFINITIONS ===
+export interface ConverterDef {
+  id: string;
+  from: 'mass' | 'density' | 'velocity';
+  to: 'mass' | 'density' | 'velocity';
+  name: string;
+  emoji: string;
+  rate: number;
+}
+
+// === PRESTIGE TIER DEFINITIONS ===
+export interface PrestigeTierDef {
+  tier: PrestigeTier;
+  name: string;
+  emoji: string;
+  shardReq: number;
+  unlockDesc: string;
+}
+
+// === COMPOSITION DEFINITIONS ===
+export interface CompositionDef {
+  id: string;
+  name: string;
+  emoji: string;
+  desc: string;
+  flavor: string;
+  unlockTier: PrestigeTier;
+  massMult: number;
+  densityMult: number;
+  velocityMult: number;
+  clickMult: number;
+  cometMult: number;
 }

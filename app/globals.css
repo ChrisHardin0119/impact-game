@@ -504,3 +504,55 @@ body {
   color: var(--color-green);
   font-size: 0.8rem;
 }
+
+/* v13 animations */
+
+/* Float up for click numbers */
+@keyframes float-up {
+  0% { opacity: 1; transform: translateY(0) scale(1); }
+  100% { opacity: 0; transform: translateY(-60px) scale(0.7); }
+}
+.animate-float-up { animation: float-up 1s ease-out forwards; }
+
+/* Bounce in for achievement popup */
+@keyframes bounce-in {
+  0% { opacity: 0; transform: translate(-50%, -20px) scale(0.8); }
+  60% { opacity: 1; transform: translate(-50%, 5px) scale(1.05); }
+  100% { transform: translate(-50%, 0) scale(1); }
+}
+.animate-bounce-in { animation: bounce-in 0.4s ease-out; }
+
+/* Impact flash animation */
+@keyframes impact-flash-anim {
+  0% { opacity: 0; }
+  15% { opacity: 1; }
+  100% { opacity: 0; }
+}
+.animate-impact-flash { animation: impact-flash-anim 1.5s ease-out forwards; }
+
+/* Impact ring expand */
+@keyframes impact-ring-anim {
+  0% { width: 20px; height: 20px; opacity: 1; }
+  100% { width: 400px; height: 400px; opacity: 0; }
+}
+.animate-impact-ring { animation: impact-ring-anim 1.2s ease-out forwards; }
+
+/* Impact debris */
+@keyframes impact-debris-anim {
+  0% { transform: translate(0,0) scale(1); opacity: 1; }
+  100% { transform: translate(calc(cos(var(--angle)) * 200px), calc(sin(var(--angle)) * 200px)) scale(0); opacity: 0; }
+}
+.animate-impact-debris { animation: impact-debris-anim 1s ease-out forwards; }
+
+/* Impact text */
+@keyframes impact-text-anim {
+  0% { opacity: 0; transform: scale(0.5); }
+  30% { opacity: 1; transform: scale(1.2); }
+  60% { transform: scale(1); }
+  100% { opacity: 0; }
+}
+.animate-impact-text { animation: impact-text-anim 1.5s ease-out forwards; }
+
+/* Hide scrollbar on tab bar */
+.no-scrollbar { scrollbar-width: none; -ms-overflow-style: none; }
+.no-scrollbar::-webkit-scrollbar { display: none; }

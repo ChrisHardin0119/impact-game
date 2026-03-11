@@ -1,1399 +1,1317 @@
 'use client';
 
 import { useState, useRef, useCallback, useEffect } from 'react';
-import { GameState, TabName, BuyMode, FloatingNumber } from '@/lib/types';
-import { defaultGameState } from '@/lib/prestige';
-import { processClick, buyProcess, activateOrbitalMechanic, getMassPerSecond, getClickValue, catchComet, activateElementalCharge } from '@/lib/gameEngine';
-import { getProcessCost, getMaxAffordable, PROCESSES } from '@/lib/processes';
-import { ORBITAL_MECHANICS, getUnlockedOM, getTotalEnergyDrain } from '@/lib/orbitalMechanics';
-import { CORE_UPGRADES, canPurchaseUpgrade, getUpgradeCost } from '@/lib/upgrades';
-import { COMPOSITIONS, getUnlockedCompositions } from '@/lib/compositions';
-import { calcShards, canPrestige, getPrestigeResetState, PRESTIGE_TIERS } from '@/lib/prestige';
-import { DISCOVERIES, checkDiscoveries, checkPrestigeDiscoveries } from '@/lib/discoveries';
-import { getGravityMultiplier, getDensityMultiplier, getGravityZone, getDensityZone, getEnergyRegen, getMaxEnergy, getGravityOverloadMult, getDensityOverheatDrain } from '@/lib/resources';
-import { fmt, fmtPct, fmtTime } from '@/lib/format';
+import { GameState, TabName, BuyMode, FloatingNumber, AchievementPopup } from '@/lib/types';
+import { defaultGameState, canPrestige, calcShards, getPrestigeResetState, PRESTIGE_TIERS } from '@/lib/prestige';
+import { processClick, getClickValue, getMassPerSecond, getProduction, catchComet, purchaseBuilding, getCompositionDef, getUnlockedCompositions } from '@/lib/gameEngine';
+import { METALS, DENSITY_ITEMS, VELOCITY_ITEMS, getBuildingCost, getBuildingCount, getMaxAffordable, getTotalCostForN, getDensity, MASS_PER_DENSITY, getEffectiveResource } from '@/lib/buildings';
+import { ENERGY_UPGRADES, getEnergyUpgradeCost, canBuyEnergyUpgrade, getEnergyEffects } from '@/lib/energyUpgrades';
+import { CONVERTERS, executeConversion, getConvertPresets } from '@/lib/converter';
+import { ACHIEVEMENTS, getAchievementEffects } from '@/lib/achievements';
+import { TAB_UNLOCKS, SHARD_UPGRADES, getShardUpgradeCost, isTabUnlocked, getShardEffects } from '@/lib/tabUnlocks';
+import { fmt, fmtKg, fmtRate, fmtTime, fmtPercent } from '@/lib/format';
 import { saveGame, loadGame, calculateOfflineGains, hardReset, exportSave, importSave } from '@/lib/saveLoad';
 import { useGameLoop } from '@/hooks/useGameLoop';
-import SwipeableNotification, { NotificationData, NotificationType } from '@/components/SwipeableNotification';
-import TutorialOverlay, { ContextualHint } from '@/components/TutorialOverlay';
-import { WALKTHROUGH_STEPS, checkContextualHints, TutorialStep } from '@/lib/tutorial';
-import BoostBar from '@/components/BoostBar';
-import AdModal from '@/components/AdModal';
-import { BoostType, applyBoost } from '@/lib/boosts';
-import FeedbackButton from '@/components/FeedbackButton';
-import FeedbackForm from '@/components/FeedbackForm';
-import { initAdMob } from '@/lib/adMobBridge';
-import { FORGE_RECIPES, getUnlockedForges, getForgeCost, canForge, purchaseForge, getForgeEffects } from '@/lib/forge';
 
 export default function GamePage() {
   const [state, setStateRaw] = useState<GameState>(defaultGameState());
   const stateRef = useRef(state);
   const [floatingNums, setFloatingNums] = useState<FloatingNumber[]>([]);
-  const [toasts, setToasts] = useState<NotificationData[]>([]);
   const [loaded, setLoaded] = useState(false);
-  const [offlineGains, setOfflineGains] = useState<{mass: number, time: number} | null>(null);
+  const [offlineGains, setOfflineGains] = useState<{ mass: number; time: number } | null>(null);
   const nextFloatId = useRef(0);
-  const nextToastId = useRef(0);
-  const [tutorialStep, setTutorialStep] = useState(-1);
-  const [contextualHint, setContextualHint] = useState<TutorialStep | null>(null);
-  const lastHintCheckRef = useRef(0);
-  const [pendingBoost, setPendingBoost] = useState<BoostType | null>(null);
-  const [showFeedback, setShowFeedback] = useState(false);
-  const [showCompInfo, setShowCompInfo] = useState(false);
-  const [devPasscode, setDevPasscode] = useState('');
+
+  // Achievement popup queue
+  const [achievementPopups, setAchievementPopups] = useState<AchievementPopup[]>([]);
+
+  // UI state
   const [showImpactWarning, setShowImpactWarning] = useState(false);
   const [impactExploding, setImpactExploding] = useState(false);
+  const [showCompPicker, setShowCompPicker] = useState(false);
+  const [devPasscode, setDevPasscode] = useState('');
+  const [importCode, setImportCode] = useState('');
+  const [showImportExport, setShowImportExport] = useState(false);
+  const [showResetConfirm, setShowResetConfirm] = useState(false);
+  const [converterAmounts, setConverterAmounts] = useState<Record<string, number>>({});
 
-  // Click combo system
+  // Click combo
   const [clickCombo, setClickCombo] = useState(0);
   const comboTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Scroll state for mini asteroid
-  const [isScrolled, setIsScrolled] = useState(false);
+  // Scroll ref
   const scrollRef = useRef<HTMLDivElement>(null);
-
-  // Draggable mini asteroid position
-  const [miniPos, setMiniPos] = useState<{x: number, y: number}>({ x: 16, y: -1 }); // y=-1 means auto
-  const isDragging = useRef(false);
-  const dragOffset = useRef({ x: 0, y: 0 });
 
   const setState = useCallback((s: GameState) => {
     stateRef.current = s;
     setStateRaw(s);
   }, []);
 
-  // Ensure text size adjust on mobile
-  useEffect(() => {
-    document.documentElement.style.setProperty('-webkit-text-size-adjust', '100%');
+  // Achievement callback for game loop
+  const handleNewAchievements = useCallback((popups: AchievementPopup[]) => {
+    setAchievementPopups(prev => [...prev, ...popups]);
   }, []);
 
-  // Initialize AdMob on native platforms
-  useEffect(() => {
-    initAdMob();
-  }, []);
+  // Game loop
+  useGameLoop(stateRef, setState, handleNewAchievements);
 
-  // Load saved mini-asteroid position
-  useEffect(() => {
-    try {
-      const saved = localStorage.getItem('impact_mini_pos');
-      if (saved) setMiniPos(JSON.parse(saved));
-    } catch {}
-  }, []);
-
-  // Save mini-asteroid position when it changes
-  useEffect(() => {
-    try {
-      localStorage.setItem('impact_mini_pos', JSON.stringify(miniPos));
-    } catch {}
-  }, [miniPos]);
-
-  // Scroll listener for content area
-  useEffect(() => {
-    const el = scrollRef.current;
-    if (!el) return;
-    const onScroll = () => {
-      setIsScrolled(el.scrollTop > 100);
-    };
-    el.addEventListener('scroll', onScroll, { passive: true });
-    return () => el.removeEventListener('scroll', onScroll);
-  }, [loaded]);
-
-  // Mini asteroid drag handlers
-  const handleDragStart = useCallback((e: React.MouseEvent | React.TouchEvent) => {
-    isDragging.current = true;
-    const clientX = 'touches' in e ? e.touches[0].clientX : e.clientX;
-    const clientY = 'touches' in e ? e.touches[0].clientY : e.clientY;
-    const el = (e.target as HTMLElement).closest('.mini-asteroid') as HTMLElement;
-    if (el) {
-      const rect = el.getBoundingClientRect();
-      dragOffset.current = { x: clientX - rect.left, y: clientY - rect.top };
-    }
-    e.preventDefault();
-  }, []);
-
-  useEffect(() => {
-    const onMove = (e: MouseEvent | TouchEvent) => {
-      if (!isDragging.current) return;
-      const clientX = 'touches' in e ? e.touches[0].clientX : e.clientX;
-      const clientY = 'touches' in e ? e.touches[0].clientY : e.clientY;
-      setMiniPos({
-        x: Math.max(0, Math.min(window.innerWidth - 60, clientX - dragOffset.current.x)),
-        y: Math.max(0, Math.min(window.innerHeight - 60, clientY - dragOffset.current.y)),
-      });
-    };
-    const onEnd = () => { isDragging.current = false; };
-    window.addEventListener('mousemove', onMove);
-    window.addEventListener('mouseup', onEnd);
-    window.addEventListener('touchmove', onMove, { passive: false });
-    window.addEventListener('touchend', onEnd);
-    return () => {
-      window.removeEventListener('mousemove', onMove);
-      window.removeEventListener('mouseup', onEnd);
-      window.removeEventListener('touchmove', onMove);
-      window.removeEventListener('touchend', onEnd);
-    };
-  }, []);
-
-  // Load save on mount
+  // Load game on mount
   useEffect(() => {
     const saved = loadGame();
     if (saved) {
-      const { state: restored, offlineTime } = calculateOfflineGains(saved);
+      const { state: withOffline, offlineTime } = calculateOfflineGains(saved);
+      setState(withOffline);
       if (offlineTime > 5) {
-        const offlineMass = restored.totalMassEarned - saved.totalMassEarned;
-        setOfflineGains({ mass: offlineMass, time: offlineTime });
+        setOfflineGains({ mass: withOffline.mass - saved.mass, time: offlineTime });
       }
-      setState(restored);
-    } else {
-      setTutorialStep(0);
+      // Show comp picker if no composition selected
+      if (!withOffline.composition && withOffline.totalPrestigeCount > 0) {
+        setShowCompPicker(true);
+      }
     }
     setLoaded(true);
   }, [setState]);
 
-  // Game loop
-  useGameLoop(stateRef, setState);
-
-  // Check contextual hints periodically
+  // Text size fix for mobile
   useEffect(() => {
-    if (!loaded || tutorialStep >= 0) return;
-    const interval = setInterval(() => {
-      const s = stateRef.current;
-      if (s.tutorialSkipped && s.tutorialCompleted.length === 0) return;
-      const hints = checkContextualHints(s);
-      if (hints.length > 0 && !contextualHint) {
-        setContextualHint(hints[0]);
-      }
-    }, 5000);
-    return () => clearInterval(interval);
-  }, [loaded, tutorialStep, contextualHint]);
-
-  const addToast = useCallback((message: string, emoji: string = '✨', type: NotificationType = 'toast') => {
-    const id = nextToastId.current++;
-    setToasts(prev => [...prev, { id, message, emoji, type }]);
+    document.documentElement.style.setProperty('-webkit-text-size-adjust', '100%');
   }, []);
 
-  const dismissToast = useCallback((id: number) => {
-    setToasts(prev => prev.filter(t => t.id !== id));
-  }, []);
+  // === HANDLERS ===
 
-  // Tutorial handlers
-  const handleTutorialNext = useCallback(() => {
-    const nextStep = tutorialStep + 1;
-    const currentStepDef = WALKTHROUGH_STEPS[tutorialStep];
-    if (currentStepDef) {
-      const s = stateRef.current;
-      setState({
-        ...s,
-        tutorialCompleted: [...s.tutorialCompleted, currentStepDef.id],
-      });
-    }
-    if (nextStep >= WALKTHROUGH_STEPS.length) {
-      setTutorialStep(-1);
-    } else {
-      setTutorialStep(nextStep);
-    }
-  }, [tutorialStep, setState]);
+  const handleClick = useCallback((e: React.MouseEvent | React.TouchEvent) => {
+    // Combo system
+    if (comboTimerRef.current) clearTimeout(comboTimerRef.current);
+    const newCombo = clickCombo + 1;
+    setClickCombo(newCombo);
+    comboTimerRef.current = setTimeout(() => setClickCombo(0), 2000);
 
-  const handleTutorialSkip = useCallback(() => {
-    setTutorialStep(-1);
+    const comboMult = 1 + Math.min(newCombo, 50) * 0.01;
+    const clickVal = getClickValue(stateRef.current, comboMult);
+    const newState = processClick(stateRef.current, comboMult);
+
+    // Track max combo for achievement
+    if (newCombo > newState.maxComboReached) {
+      newState.maxComboReached = newCombo;
+    }
+
+    setState(newState);
+
+    // Floating number
+    const rect = (e.target as HTMLElement).getBoundingClientRect();
+    const x = 'touches' in e ? e.touches[0]?.clientX || rect.left + rect.width / 2 : e.clientX;
+    const y = 'touches' in e ? e.touches[0]?.clientY || rect.top : e.clientY;
+    const id = nextFloatId.current++;
+    setFloatingNums(prev => [...prev, { id, value: clickVal, x: x - rect.left, y: y - rect.top, opacity: 1 }]);
+    setTimeout(() => setFloatingNums(prev => prev.filter(f => f.id !== id)), 1000);
+  }, [clickCombo, setState]);
+
+  const handleBuy = useCallback((buildingId: string) => {
     const s = stateRef.current;
-    setState({ ...s, tutorialSkipped: true });
+    const count = s.buyMode === 'max'
+      ? (() => {
+          const def = [...METALS, ...DENSITY_ITEMS, ...VELOCITY_ITEMS].find(b => b.id === buildingId);
+          if (!def) return 1;
+          const owned = getBuildingCount(s, def);
+          const available = getEffectiveResource(s, def.costResource);
+          return Math.max(1, getMaxAffordable(def, owned, available));
+        })()
+      : (s.buyMode as number);
+
+    const result = purchaseBuilding(s, buildingId, count);
+    if (result) setState(result);
   }, [setState]);
 
-  const handleDismissHint = useCallback(() => {
-    if (contextualHint) {
-      const s = stateRef.current;
-      setState({
-        ...s,
-        tutorialCompleted: [...s.tutorialCompleted, contextualHint.id],
-      });
-      setContextualHint(null);
-    }
-  }, [contextualHint, setState]);
-
-  // Boost handlers
-  const handleActivateBoost = useCallback((type: BoostType) => {
+  const handleBuyEnergyUpgrade = useCallback((upgradeId: string) => {
     const s = stateRef.current;
-    if (s.adsRemoved) {
-      const result = applyBoost(type, s);
-      if (result) {
-        setState(result);
-        addToast(`Boost activated!`, '⚡', 'reward');
-      }
-    } else {
-      setPendingBoost(type);
-    }
-  }, [setState, addToast]);
-
-  const handleAdComplete = useCallback(() => {
-    if (pendingBoost) {
-      const result = applyBoost(pendingBoost, stateRef.current);
-      if (result) {
-        setState(result);
-        addToast(`Boost activated!`, '⚡', 'reward');
-      }
-      setPendingBoost(null);
-    }
-  }, [pendingBoost, setState, addToast]);
-
-  const handleAdCancel = useCallback(() => {
-    setPendingBoost(null);
-  }, []);
-
-  // Click handler with combo system
-  const handleClick = useCallback((e: React.MouseEvent) => {
-    setClickCombo(prev => {
-      const newCombo = Math.min(prev + 1, 20);
-      if (comboTimerRef.current) clearTimeout(comboTimerRef.current);
-      comboTimerRef.current = setTimeout(() => setClickCombo(0), 1500);
-      return newCombo;
-    });
-    const comboMult = 1 + (Math.min(clickCombo, 20) / 20) * 4;
-    const newState = processClick(stateRef.current, comboMult);
-    const clickValue = newState.mass - stateRef.current.mass;
-    if (clickCombo > (newState.maxComboReached || 0)) {
-      newState.maxComboReached = clickCombo;
-    }
-    setState(newState);
-    const id = nextFloatId.current++;
-    const rect = e.currentTarget.getBoundingClientRect();
-    const x = e.clientX - rect.left;
-    const y = e.clientY - rect.top;
-    setFloatingNums(prev => [...prev, { id, value: clickValue || 1, x, y, opacity: 1 }]);
-    setTimeout(() => setFloatingNums(prev => prev.filter(f => f.id !== id)), 1000);
-  }, [setState, clickCombo]);
-
-  // Mini asteroid click — acts as clicking the asteroid (earns mass)
-  const handleMiniClick = useCallback(() => {
-    if (isDragging.current) return;
-    // Same combo logic as main asteroid
-    setClickCombo(prev => {
-      const newCombo = Math.min(prev + 1, 20);
-      if (comboTimerRef.current) clearTimeout(comboTimerRef.current);
-      comboTimerRef.current = setTimeout(() => setClickCombo(0), 1500);
-      return newCombo;
-    });
-    const comboMult = 1 + (Math.min(clickCombo, 20) / 20) * 4;
-    const newState = processClick(stateRef.current, comboMult);
-    if (clickCombo > (newState.maxComboReached || 0)) {
-      newState.maxComboReached = clickCombo;
-    }
-    setState(newState);
-  }, [setState, clickCombo]);
-
-  // Buy info helper
-  const getBuyInfo = useCallback((processDef: typeof PROCESSES[0], owned: number, mass: number, buyMode: BuyMode, hasDiscount: boolean) => {
-    if (buyMode === 'max') {
-      let affordable = 0;
-      let totalCost = 0;
-      let remaining = mass;
-      for (let i = 0; i < 9999; i++) {
-        let nextCost = getProcessCost(processDef, owned + i);
-        if (hasDiscount) nextCost *= 0.5;
-        if (remaining < nextCost) break;
-        remaining -= nextCost;
-        totalCost += nextCost;
-        affordable++;
-      }
-      if (affordable === 0) {
-        let singleCost = getProcessCost(processDef, owned);
-        if (hasDiscount) singleCost *= 0.5;
-        return { count: 0, totalCost: singleCost, canAfford: false, label: fmt(singleCost) };
-      }
-      return { count: affordable, totalCost, canAfford: true, label: `${fmt(totalCost)} (x${affordable})` };
-    } else {
-      const count = buyMode as number;
-      let totalCost = 0;
-      for (let i = 0; i < count; i++) {
-        let nextCost = getProcessCost(processDef, owned + i);
-        if (hasDiscount) nextCost *= 0.5;
-        totalCost += nextCost;
-      }
-      const canAfford = mass >= totalCost;
-      return { count, totalCost, canAfford, label: fmt(totalCost) };
-    }
-  }, []);
-
-  // Buy process
-  const handleBuy = useCallback((processId: string) => {
-    const s = stateRef.current;
-    const processDef = PROCESSES.find(p => p.id === processId);
-    if (!processDef) return;
-    const owned = s.processes[processId] || 0;
-    const hasDiscount = s.omToggles?.['process_optimizer'] || false;
-    const info = getBuyInfo(processDef, owned, s.mass, s.buyMode, hasDiscount);
-    if (!info.canAfford || info.count <= 0) return;
-    const newState = {
-      ...s,
-      mass: s.mass - info.totalCost,
-      processes: { ...s.processes, [processId]: owned + info.count },
-    };
-    setState(newState);
-  }, [setState, getBuyInfo]);
-
-  const handleOM = useCallback((omId: string) => {
-    const omDef = ORBITAL_MECHANICS.find(o => o.id === omId);
-    if (!omDef) return;
-    const currentState = stateRef.current;
-    const result = activateOrbitalMechanic(omId, currentState);
-    if (result) {
-      result.omUsedThisRun = true;
-      if (omDef.isToggle) {
-        result.totalOrbitalToggles = (result.totalOrbitalToggles || 0) + 1;
-      }
-      setState(result);
-      if (omDef.isToggle) {
-        const wasOn = currentState.omToggles?.[omId] || false;
-        addToast(`${omDef.name} ${wasOn ? 'OFF' : 'ON'}`, wasOn ? '🔴' : '🟢');
-      } else {
-        addToast(`Activated ${omDef.name}`, '🚀');
-      }
-    }
-  }, [setState, addToast]);
-
-  const handleUpgrade = useCallback((upgradeId: string) => {
-    const s = stateRef.current;
-    const def = CORE_UPGRADES.find(u => u.id === upgradeId);
-    if (!def || !canPurchaseUpgrade(def, s)) return;
-    const level = s.coreUpgrades[upgradeId] || 0;
-    const cost = getUpgradeCost(def, level);
+    const def = ENERGY_UPGRADES.find(u => u.id === upgradeId);
+    if (!def) return;
+    const level = s.energyUpgrades[def.id] || 0;
+    if (level >= def.maxLevel) return;
+    const cost = getEnergyUpgradeCost(def, level);
+    if (s.energy < cost) return;
     setState({
       ...s,
-      currentShards: s.currentShards - cost,
-      coreUpgrades: { ...s.coreUpgrades, [upgradeId]: level + 1 },
+      energy: s.energy - cost,
+      energyUpgrades: { ...s.energyUpgrades, [def.id]: level + 1 },
     });
-    addToast(`Upgraded ${def.name}!`, def.emoji);
-  }, [setState, addToast]);
+  }, [setState]);
 
-  const doPrestige = useCallback(() => {
+  // Track last jettison message
+  const [jettisonMsg, setJettisonMsg] = useState<string | null>(null);
+
+  const handleConvert = useCallback((converterId: string) => {
     const s = stateRef.current;
-    if (!canPrestige(s)) return;
-    const prestigeDiscoveries = checkPrestigeDiscoveries(s);
-    let updatedState = { ...s };
-    if (prestigeDiscoveries.length > 0) {
-      updatedState.discoveries = [...updatedState.discoveries, ...prestigeDiscoveries];
-      for (const dId of prestigeDiscoveries) {
-        const d = DISCOVERIES.find(dd => dd.id === dId);
-        if (d) addToast(`${d.hidden ? '🔒 Secret: ' : ''}${d.name}!`, d.emoji, 'reward');
+    const conv = CONVERTERS.find(c => c.id === converterId);
+    if (!conv) return;
+    const amount = converterAmounts[converterId] || 0;
+    if (amount <= 0) return;
+    const result = executeConversion(s, conv, amount);
+    if (result) {
+      setState(result.state);
+      if (result.massJettisoned > 0) {
+        setJettisonMsg(`Jettisoned ${fmtKg(result.massJettisoned)} of mass`);
+        setTimeout(() => setJettisonMsg(null), 3000);
       }
+      setConverterAmounts(prev => ({ ...prev, [converterId]: 0 }));
     }
-    if (s.runTime > 0 && s.runTime < (updatedState.fastestPrestige || Infinity)) {
-      updatedState.fastestPrestige = s.runTime;
-    }
-    let shardMult = 1;
-    if (updatedState.boosts.prestigeDouble.active && !updatedState.boosts.prestigeDouble.usedThisRun) {
-      shardMult = 2;
-    }
-    const forgeShardMult = getForgeEffects(updatedState).shardMult;
-    const shardsEarned = calcShards(updatedState.runMassEarned, updatedState.currentTier, shardMult, updatedState.discoveries, forgeShardMult);
-    let newState = getPrestigeResetState(updatedState);
-    if (shardMult === 2) {
-      newState.boosts = {
-        ...newState.boosts,
-        prestigeDouble: { active: false, usedThisRun: true },
-      };
-    }
-    newState.currentShards += shardsEarned;
-    newState.lifetimeShards += shardsEarned;
-    for (let i = updatedState.currentTier + 1; i <= 5; i++) {
-      if (newState.lifetimeShards >= PRESTIGE_TIERS[i].shardReq) {
-        newState.currentTier = i as any;
-      }
-    }
-    setState(newState);
-    const doubleText = shardMult === 2 ? ' (2x bonus!)' : '';
-    addToast(`Impact! +${fmt(shardsEarned)} shards${doubleText}`, '💥');
-  }, [setState, addToast]);
-
-  const handlePrestige = useCallback(() => {
-    setShowImpactWarning(false);
-    setImpactExploding(true);
-    // Play explosion animation for 1.5s, then do the actual prestige
-    setTimeout(() => {
-      doPrestige();
-      // Keep explosion overlay briefly after reset
-      setTimeout(() => {
-        setImpactExploding(false);
-      }, 500);
-    }, 1500);
-  }, [doPrestige]);
-
-  const handleComposition = useCallback((id: string) => {
-    setState({ ...stateRef.current, composition: id as any });
-    addToast(`Composition: ${id}`, '🪨');
-  }, [setState, addToast]);
+  }, [setState, converterAmounts]);
 
   const handleCatchComet = useCallback((cometId: number) => {
     const { state: newState, value } = catchComet(stateRef.current, cometId);
     if (value > 0) {
       setState(newState);
-      addToast(`Comet caught! +${fmt(value)} mass`, '☄️');
     }
-  }, [setState, addToast]);
-
-  const handleForge = useCallback((forgeId: string) => {
-    const forgeDef = FORGE_RECIPES.find(f => f.id === forgeId);
-    if (!forgeDef) return;
-    const result = purchaseForge(forgeDef, stateRef.current);
-    if (result) {
-      setState(result);
-      addToast(`Forged ${forgeDef.name}!`, forgeDef.emoji);
-    }
-  }, [setState, addToast]);
-
-  const handleCharge = useCallback((processId: string) => {
-    const result = activateElementalCharge(stateRef.current, processId);
-    if (result) {
-      setState(result);
-      const pName = PROCESSES.find(p => p.id === processId)?.name || processId;
-      addToast(`Charged ${pName}! +50% for 8s`, '💎');
-    }
-  }, [setState, addToast]);
-
-  const setTab = useCallback((tab: TabName) => {
-    setState({ ...stateRef.current, activeTab: tab });
   }, [setState]);
 
-  const setBuyMode = useCallback((mode: BuyMode) => {
-    setState({ ...stateRef.current, buyMode: mode });
+  const handleTabSwitch = useCallback((tab: TabName) => {
+    const s = stateRef.current;
+    if (!isTabUnlocked(tab, s.unlockedTabs) && tab !== 'dev') return;
+    setState({ ...s, activeTab: tab, tabSwitchCount: s.tabSwitchCount + 1 });
   }, [setState]);
 
-  if (!loaded) {
-    return <div className="flex items-center justify-center h-screen bg-space"><span className="glow-cyan text-2xl">Loading Impact...</span></div>;
-  }
+  const handleBuyTabUnlock = useCallback((tabId: string) => {
+    const s = stateRef.current;
+    const def = TAB_UNLOCKS.find(t => t.tabId === tabId);
+    if (!def) return;
+    if (s.unlockedTabs[tabId]) return;
+    if (s.currentShards < def.shardCost) return;
+    if (s.totalPrestigeCount < def.requiresPrestige) return;
+    setState({
+      ...s,
+      currentShards: s.currentShards - def.shardCost,
+      unlockedTabs: { ...s.unlockedTabs, [tabId]: true },
+      activeTab: tabId as TabName,
+    });
+  }, [setState]);
 
-  const { activeTab } = state;
-  const hasAnyUpgrade = Object.values(state.coreUpgrades).some(v => v > 0);
-  const tabs: { id: TabName; label: string; icon: string }[] = [
-    { id: 'build', label: 'Build', icon: '🏗️' },
-    { id: 'orbital', label: 'Orbital', icon: '🚀' },
-    ...(hasAnyUpgrade ? [{ id: 'forge' as TabName, label: 'Forge', icon: '🔥' }] : []),
-    { id: 'upgrades', label: 'Upgrades', icon: '⬆️' },
-    { id: 'prestige', label: 'Impact', icon: '💥' },
-    { id: 'discover', label: 'Discover', icon: '🔍' },
-    { id: 'stats', label: 'Stats', icon: '📊' },
-    ...(state.devMode ? [{ id: 'dev' as TabName, label: 'Dev', icon: '🛠️' }] : []),
+  const handleVelocityUnlockReady = useCallback(() => {
+    const s = stateRef.current;
+    setState({ ...s, velocityUnlockReady: true });
+  }, [setState]);
+
+  const handleBuyShardUpgrade = useCallback((upgradeId: string) => {
+    const s = stateRef.current;
+    const def = SHARD_UPGRADES.find(u => u.id === upgradeId);
+    if (!def) return;
+    const level = s.shardUpgrades[def.id] || 0;
+    if (level >= def.maxLevel) return;
+    const cost = getShardUpgradeCost(def, level);
+    if (s.currentShards < cost) return;
+    setState({
+      ...s,
+      currentShards: s.currentShards - cost,
+      shardUpgrades: { ...s.shardUpgrades, [def.id]: level + 1 },
+    });
+  }, [setState]);
+
+  const handleImpact = useCallback(() => {
+    setShowImpactWarning(true);
+  }, []);
+
+  const confirmImpact = useCallback(() => {
+    setShowImpactWarning(false);
+    setImpactExploding(true);
+
+    const s = stateRef.current;
+    const shardEff = getShardEffects(s.shardUpgrades);
+    const achieveEff = getAchievementEffects(s);
+    const energyEff = getEnergyEffects(s);
+    const bonusMult = shardEff.massMult * achieveEff.shardMult * (1 + (energyEff.shardMult - 1));
+    const earnedShards = calcShards(s.runMassEarned, s.currentTier, bonusMult);
+
+    let newState = getPrestigeResetState(s);
+    newState.currentShards += earnedShards;
+    newState.lifetimeShards += earnedShards;
+
+    // Track fastest prestige
+    if (s.runTime < newState.fastestPrestige) {
+      newState.fastestPrestige = s.runTime;
+    }
+
+    // Check tier upgrades
+    for (let t = 5; t >= 0; t--) {
+      const tierDef = PRESTIGE_TIERS[t];
+      if (tierDef && newState.lifetimeShards >= tierDef.shardReq && t > newState.currentTier) {
+        newState.currentTier = t as any;
+      }
+    }
+
+    setTimeout(() => {
+      setState(newState);
+      setImpactExploding(false);
+      saveGame(newState);
+      // Show comp picker if they have compositions to choose
+      if (getUnlockedCompositions(newState.currentTier).length > 0) {
+        setShowCompPicker(true);
+      }
+    }, 1500);
+  }, [setState]);
+
+  const handleCompSelect = useCallback((compId: string) => {
+    setState({ ...stateRef.current, composition: compId });
+    setShowCompPicker(false);
+  }, [setState]);
+
+  const handleShardAd = useCallback(() => {
+    const s = stateRef.current;
+    if (!s.shardAdAvailable) return;
+    const bonus = Math.max(1, Math.floor(s.lifetimeShards * 0.1));
+    setState({
+      ...s,
+      currentShards: s.currentShards + bonus,
+      lifetimeShards: s.lifetimeShards + bonus,
+      shardAdAvailable: false,
+      nextShardAdIn: 600 + Math.random() * 600,
+    });
+  }, [setState]);
+
+  const handleVelocityAd = useCallback(() => {
+    const s = stateRef.current;
+    if (!s.velocityAdAvailable) return;
+    setState({
+      ...s,
+      activeBoosts: {
+        ...s.activeBoosts,
+        velocityDouble: { active: true, endsAt: Date.now() + 20 * 60 * 1000 },
+      },
+      velocityAdAvailable: false,
+      nextVelocityAdIn: 1200 + Math.random() * 1200,
+    });
+  }, [setState]);
+
+  const handleDevPasscode = useCallback(() => {
+    if (devPasscode === '9173') {
+      setState({ ...stateRef.current, devMode: true });
+      setDevPasscode('');
+    }
+  }, [devPasscode, setState]);
+
+  const handleHardReset = useCallback(() => {
+    hardReset();
+    const fresh = defaultGameState();
+    setState(fresh);
+    setShowResetConfirm(false);
+  }, [setState]);
+
+  const handleExport = useCallback(() => {
+    const code = exportSave(stateRef.current);
+    navigator.clipboard?.writeText(code);
+    setImportCode(code);
+  }, []);
+
+  const handleImport = useCallback(() => {
+    if (!importCode.trim()) return;
+    const result = importSave(importCode.trim());
+    if (result) {
+      setState(result);
+      saveGame(result);
+      setShowImportExport(false);
+      setImportCode('');
+    }
+  }, [importCode, setState]);
+
+  // === COMPUTED VALUES ===
+  const prod = getProduction(state);
+  const clickVal = getClickValue(state);
+  const tierDef = PRESTIGE_TIERS[state.currentTier];
+  const canDoImpact = canPrestige(state);
+  const shardEff = getShardEffects(state.shardUpgrades);
+  const achieveEff = getAchievementEffects(state);
+  const energyEff = getEnergyEffects(state);
+  const bonusMult = shardEff.massMult * achieveEff.shardMult * (1 + (energyEff.shardMult - 1));
+  const pendingShards = calcShards(state.runMassEarned, state.currentTier, bonusMult);
+
+  // === TAB CONFIG ===
+  const TAB_CONFIG: { id: TabName; label: string; emoji: string }[] = [
+    { id: 'metals', label: 'Metals', emoji: '⛏️' },
+    { id: 'density', label: 'Density', emoji: '🧊' },
+    { id: 'velocity', label: 'Velocity', emoji: '💨' },
+    { id: 'converter', label: 'Convert', emoji: '🔄' },
+    { id: 'energy', label: 'Energy', emoji: '⚡' },
+    { id: 'impact', label: 'Impact', emoji: '💥' },
+    { id: 'achievements', label: 'Awards', emoji: '🏆' },
+    { id: 'stats', label: 'Stats', emoji: '📊' },
   ];
 
-  // Calculate display values
-  const gravMult = getGravityMultiplier(state.gravity);
-  const densMult = getDensityMultiplier(state.density);
-  const gravZone = getGravityZone(state.gravity);
-  const densZone = getDensityZone(state.density);
-  const massPerSec = getMassPerSecond(state);
-  const shardsOnPrestige = canPrestige(state) ? calcShards(state.runMassEarned, state.currentTier, 1, state.discoveries, getForgeEffects(state).shardMult) : 0;
-  const currentTierDef = PRESTIGE_TIERS[state.currentTier];
-  const nextTierDef = state.currentTier < 5 ? PRESTIGE_TIERS[state.currentTier + 1] : null;
-  const unlockedComps = getUnlockedCompositions(state.currentTier);
-  const unlockedOM = getUnlockedOM(state.currentTier);
-
-  // Show mini asteroid whenever scrolled on build tab, or always on other tabs
-  const showMiniAsteroid = activeTab !== 'build' || isScrolled;
-
-  return (
-    <div className="scanlines flex flex-col game-shell no-select safe-top">
-      {/* Resource Header */}
-      <div className="bg-space-light border-b border-gray-700 px-5 sm:px-6 py-2.5">
-        <div className="flex items-center justify-between mb-1.5">
-          <div className="flex items-center gap-2 sm:gap-4 min-w-0">
-            <span className="glow-cyan font-bold text-base sm:text-xl truncate">{currentTierDef.emoji} {currentTierDef.name}</span>
-            {state.composition && <button className="badge badge-purple cursor-pointer hover:brightness-125 active:scale-95 transition-all" onClick={() => setShowCompInfo(true)}>{COMPOSITIONS.find(c => c.id === state.composition)?.name} ⓘ</button>}
-          </div>
-          <div className="flex gap-2 shrink-0 items-center">
-            <button className="btn-secondary text-sm px-2.5 py-1" onClick={() => saveGame(state)}>Save</button>
-            <button className="btn-secondary text-sm px-2.5 py-1" onClick={() => setTab('stats')}>⚙</button>
-            <span className="text-xs text-gray-600">v12.7</span>
-          </div>
-        </div>
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-x-4 gap-y-2 sm:gap-3">
-          {/* Mass */}
-          <div>
-            <div className="text-xs text-gray-400 uppercase tracking-wider">Mass</div>
-            <div className="glow-cyan text-base font-bold">{fmt(state.mass)}</div>
-            {massPerSec > 0 && <div className="text-sm text-green font-bold">+{fmt(massPerSec)}/s</div>}
-          </div>
-          {/* Gravity */}
-          <div>
-            <div className="text-xs text-gray-400 uppercase tracking-wider">Gravity <span className="text-white normal-case">{fmt(state.gravity, 0)}/300</span></div>
-            <div className="resource-bar mt-1">
-              <div className="resource-bar-fill" style={{width: `${(state.gravity / 300) * 100}%`, background: gravZone.color}} />
-            </div>
-            <div className="flex items-center gap-1.5 mt-0.5">
-              <span className="text-xs font-bold" style={{color: gravZone.color}}>{gravZone.label}</span>
-              <span className="badge" style={{background: gravMult >= 1 ? 'rgba(0,255,136,0.15)' : 'rgba(255,51,102,0.15)', color: gravMult >= 1 ? 'var(--color-green)' : 'var(--color-red)', border: 'none', fontSize: '0.65rem'}}>{gravMult.toFixed(2)}x</span>
-              {state.gravity > 250 && <span className="text-xs text-red font-bold animate-pulse">-{Math.round((1 - getGravityOverloadMult(state.gravity)) * 100)}% mass!</span>}
-            </div>
-          </div>
-          {/* Density */}
-          <div>
-            <div className="text-xs text-gray-400 uppercase tracking-wider">Density <span className="text-white normal-case">{state.density.toFixed(1)}%</span></div>
-            <div className="resource-bar mt-1">
-              <div className="resource-bar-fill" style={{width: `${state.density}%`, background: densZone.color}} />
-            </div>
-            <div className="flex items-center gap-1.5 mt-0.5">
-              <span className="text-xs font-bold" style={{color: densZone.color}}>{densZone.label}</span>
-              <span className="badge" style={{background: densMult >= 1 ? 'rgba(180,74,255,0.15)' : 'rgba(255,51,102,0.15)', color: densMult >= 1 ? 'var(--color-purple)' : 'var(--color-red)', border: 'none', fontSize: '0.65rem'}}>{densMult.toFixed(2)}x</span>
-              {state.density > 85 && <span className="text-xs text-red font-bold animate-pulse">-{getDensityOverheatDrain(state.density).toFixed(1)} nrg!</span>}
-            </div>
-          </div>
-          {/* Energy */}
-          <div>
-            <div className="text-xs text-gray-400 uppercase tracking-wider">Energy <span className="text-white normal-case">{Math.floor(state.energy)}/{getMaxEnergy(state)}</span></div>
-            <div className="resource-bar mt-1">
-              <div className="resource-bar-fill" style={{width: `${(state.energy / getMaxEnergy(state)) * 100}%`, background: 'var(--color-orange)'}} />
-            </div>
-            <div className="text-xs text-orange mt-0.5 font-bold">+{getEnergyRegen(state).toFixed(1)}/s</div>
-          </div>
-        </div>
+  if (!loaded) {
+    return (
+      <div className="min-h-screen bg-gray-950 flex items-center justify-center">
+        <div className="text-white text-xl animate-pulse">Loading Impact...</div>
       </div>
+    );
+  }
 
-      {/* Boost Bar */}
-      <BoostBar state={state} onActivateBoost={handleActivateBoost} />
+  // === RENDER HELPERS ===
 
-      {/* Tab Navigation */}
-      <div className="tab-bar border-b border-gray-700 bg-space-light px-3">
-        {tabs.map(t => (
-          <button key={t.id} className={`tab whitespace-nowrap flex-1 justify-center ${activeTab === t.id ? 'tab-active' : ''}`} onClick={() => setTab(t.id)}>
-            <span className="sm:mr-1">{t.icon}</span><span className="hidden sm:inline">{t.label}</span>
-          </button>
-        ))}
-      </div>
+  function renderBuildingCard(def: typeof METALS[0], tab: 'metals' | 'density' | 'velocity') {
+    const owned = getBuildingCount(state, def);
+    const cost = getBuildingCost(def, owned);
+    const resource = getEffectiveResource(state, def.costResource);
+    const buyCount = state.buyMode === 'max' ? getMaxAffordable(def, owned, resource) : (state.buyMode as number);
+    const totalCost = state.buyMode === 'max' ? (buyCount > 0 ? getTotalCostForN(def, owned, buyCount) : cost) : getTotalCostForN(def, owned, buyCount);
+    const canAfford = resource >= totalCost && buyCount > 0;
+    const costUnit = def.costResource === 'mass' ? 'Kg' : def.costResource;
+    const displayCount = state.buyMode === 'max' ? (buyCount > 0 ? buyCount : 1) : buyCount;
 
-      {/* Content Area */}
-      <div ref={scrollRef} className="flex-1 overflow-y-auto px-5 sm:px-6 py-3 pb-16 safe-bottom">
-        {/* Composition Picker */}
-        {!state.composition && activeTab === 'build' && (
-          <div className="mb-4">
-            <div className="section-header"><h2 className="glow-cyan text-lg font-bold">Choose Your Composition</h2></div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              {unlockedComps.map(c => (
-                <button key={c.id} className="card text-left hover:border-neon transition-colors" onClick={() => handleComposition(c.id)}>
-                  <div className="font-bold text-base">{c.emoji} {c.name}</div>
-                  <div className="text-sm text-gray-400 mt-1">{c.desc}</div>
-                  <div className="glow-divider" />
-                  <div className="text-sm text-purple">{c.specialName}: {c.specialDesc}</div>
-                </button>
+    // For density costs, show the mass equivalent being jettisoned
+    const isDensityCost = def.costResource === 'density';
+    const massJettisoned = isDensityCost ? totalCost * MASS_PER_DENSITY : 0;
+
+    return (
+      <div key={def.id} className="bg-gray-800 rounded-lg p-3 mb-2">
+        <div className="flex justify-between items-start">
+          <div className="flex-1">
+            <div className="flex items-center gap-2">
+              <span className="text-lg">{def.emoji}</span>
+              <span className="text-white font-medium text-sm">{def.name}</span>
+              <span className="text-gray-400 text-xs">x{owned}</span>
+            </div>
+            <p className="text-gray-400 text-xs mt-0.5">{def.desc}</p>
+            <div className="text-green-400 text-xs mt-1">
+              {def.produces.map((p, i) => (
+                <span key={i}>
+                  {i > 0 && ' + '}
+                  +{fmt(p.baseAmount * owned)}/s {p.resource}
+                </span>
               ))}
             </div>
+            {isDensityCost && totalCost > 0 && (
+              <div className="text-orange-400 text-[10px] mt-0.5">
+                Jettisoning {fmtKg(massJettisoned)} of mass
+              </div>
+            )}
           </div>
-        )}
+          <button
+            onClick={() => handleBuy(def.id)}
+            disabled={!canAfford}
+            className={`ml-2 px-3 py-2 rounded text-xs font-bold min-w-[80px] transition-colors ${
+              canAfford
+                ? 'bg-blue-600 hover:bg-blue-500 text-white'
+                : 'bg-gray-700 text-gray-500 cursor-not-allowed'
+            }`}
+          >
+            <div>Buy {displayCount > 1 ? `x${displayCount}` : ''}</div>
+            <div className="text-[10px] opacity-80">{fmt(totalCost)} {costUnit}</div>
+          </button>
+        </div>
+      </div>
+    );
+  }
 
-        {/* BUILD TAB */}
-        {activeTab === 'build' && (
-          <div>
-            {/* Click area */}
-            <div className="flex justify-center mb-6 mt-1">
-              <div className="relative cursor-pointer select-none" onClick={handleClick}>
-                <div className={`w-28 h-28 sm:w-32 sm:h-32 rounded-full bg-gradient-to-br from-gray-600 to-gray-800 border-2 flex items-center justify-center text-4xl hover:scale-105 transition-all active:scale-95 ${clickCombo >= 15 ? 'border-yellow' : clickCombo >= 8 ? 'border-orange' : clickCombo >= 3 ? 'border-neon' : 'border-gray-500'}`} style={{boxShadow: `0 0 ${Math.min(30, Math.log10(state.mass + 1) * 3) + clickCombo * 1.5}px ${clickCombo >= 15 ? 'var(--color-yellow)' : clickCombo >= 8 ? 'var(--color-orange)' : 'var(--color-neon)'}`}}>
-                  {currentTierDef.emoji}
+  function renderTabBar() {
+    return (
+      <div className="flex overflow-x-auto gap-1 px-2 py-2 bg-gray-900 border-b border-gray-800 no-scrollbar">
+        {TAB_CONFIG.map(tab => {
+          const unlocked = isTabUnlocked(tab.id, state.unlockedTabs);
+          const isActive = state.activeTab === tab.id;
+          const unlockDef = TAB_UNLOCKS.find(t => t.tabId === tab.id);
+
+          // Special: velocity tab with threshold-based unlock
+          if (tab.id === 'velocity' && !unlocked && unlockDef?.unlockViaImpact) {
+            const threshold = unlockDef.velocityThreshold || 50;
+            const meetsThreshold = state.velocity >= threshold;
+            return (
+              <button
+                key={tab.id}
+                className="flex-shrink-0 px-3 py-1.5 rounded text-xs bg-gray-800 text-gray-600 border border-gray-700 relative"
+                disabled
+              >
+                <span>{tab.emoji} {tab.label}</span>
+                <div className="text-[9px] text-yellow-500">
+                  {meetsThreshold
+                    ? (state.velocityUnlockReady ? '⏳ Impact to unlock' : `✅ ${fmt(threshold)} vel reached`)
+                    : `🔒 ${fmt(threshold)} vel`
+                  }
                 </div>
-                <div className="absolute -bottom-5 left-1/2 -translate-x-1/2 text-xs text-gray-400 whitespace-nowrap">
-                  +{fmt(getClickValue(state, 1 + (Math.min(clickCombo, 20) / 20) * 4))}/click
-                </div>
-                {clickCombo >= 3 && (
-                  <div className={`absolute -top-3 left-1/2 -translate-x-1/2 text-xs font-bold px-2 py-0.5 rounded-full ${clickCombo >= 15 ? 'bg-yellow text-space' : clickCombo >= 8 ? 'bg-orange text-space' : 'bg-neon text-space'}`}>
-                    {(1 + (Math.min(clickCombo, 20) / 20) * 4).toFixed(1)}x COMBO
+              </button>
+            );
+          }
+
+          if (!unlocked) {
+            return (
+              <button
+                key={tab.id}
+                className="flex-shrink-0 px-3 py-1.5 rounded text-xs bg-gray-800 text-gray-600 border border-gray-700"
+                disabled
+              >
+                <span>{tab.emoji} {tab.label}</span>
+                {unlockDef && (
+                  <div className="text-[9px] text-yellow-500">
+                    🔒 {unlockDef.shardCost > 0 ? `${unlockDef.shardCost} shards` : `${unlockDef.requiresPrestige} impacts`}
                   </div>
                 )}
-                {floatingNums.map(f => (
-                  <div key={f.id} className="float-up absolute text-neon font-bold pointer-events-none text-base" style={{left: f.x, top: f.y}}>
-                    +{fmt(f.value)}
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            {/* Buy mode selector */}
-            <div className="flex items-center gap-2 mb-3">
-              <span className="text-xs text-gray-400 uppercase tracking-wider">Buy:</span>
-              {([1, 5, 10, 100, 'max'] as BuyMode[]).map(m => (
-                <button key={String(m)} className={`text-sm px-2.5 py-1.5 rounded-md min-h-[36px] transition-all ${state.buyMode === m ? 'bg-neon text-space font-bold shadow-[0_0_10px_rgba(0,240,255,0.3)]' : 'bg-space-lighter text-gray-400 hover:text-neon hover:border-neon border border-transparent'}`} onClick={() => setBuyMode(m)}>
-                  {m === 'max' ? 'MAX' : `x${m}`}
-                </button>
-              ))}
-            </div>
-
-            {/* Process list */}
-            <div className="space-y-2.5">
-              {PROCESSES.map(p => {
-                const owned = state.processes[p.id] || 0;
-                const hasDiscount = state.omToggles?.['process_optimizer'] || false;
-                const buyInfo = getBuyInfo(p, owned, state.mass, state.buyMode, hasDiscount);
-                const unlocked = !p.unlockCondition ||
-                  (p.unlockCondition.type === 'mass' && state.totalMassEarned >= p.unlockCondition.value) ||
-                  (p.unlockCondition.type === 'tier' && state.currentTier >= p.unlockCondition.value) ||
-                  (p.unlockCondition.type === 'gravity' && state.gravity >= p.unlockCondition.value);
-                if (!unlocked && owned === 0) return null;
-
-                const isCharged = state.chargedProcess === p.id && state.chargeCooldown > 0;
-                return (
-                  <div key={p.id} className={`card flex items-center justify-between ${isCharged ? 'border-purple shadow-[0_0_12px_rgba(180,74,255,0.3)]' : buyInfo.canAfford ? 'hover:border-neon' : 'opacity-60'}`}>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <span className="text-lg">{p.emoji}</span>
-                        <span className="font-bold text-base">{p.name}</span>
-                        <span className="badge badge-cyan">x{owned}</span>
-                        {p.compositionBonus === state.composition && <span className="badge badge-purple">★ bonus</span>}
-                        {isCharged && <span className="badge badge-yellow">⚡ {Math.ceil(state.chargeCooldown)}s</span>}
-                      </div>
-                      <div className="text-sm text-gray-400 mt-1">{p.desc}</div>
-                      <div className="flex flex-wrap gap-2 mt-1.5">
-                        <span className="badge badge-green">+{fmt(p.baseMPS)}/s mass</span>
-                        {p.gravityPS > 0 && <span className="badge badge-orange">+{p.gravityPS}/s grav</span>}
-                        {p.densityPS > 0 && <span className="badge badge-purple">+{fmtPct(p.densityPS)}/s dens</span>}
-                      </div>
-                    </div>
-                    <div className="flex flex-col gap-1.5 ml-3 shrink-0">
-                      <button className="btn-primary text-xs min-w-[6rem] max-w-[8rem] text-center truncate" disabled={!buyInfo.canAfford} onClick={() => handleBuy(p.id)}>
-                        {buyInfo.label}
-                      </button>
-                      {state.composition === 'carbonaceous' && owned > 0 && (
-                        <button
-                          className="text-xs px-2 py-1 rounded-md min-w-[5.5rem] text-center transition-all bg-purple/20 text-purple border border-purple/40 hover:bg-purple/30 disabled:opacity-40 disabled:cursor-not-allowed"
-                          disabled={state.chargeCooldown > 0 || state.density < 5}
-                          onClick={() => handleCharge(p.id)}
-                        >
-                          ⚡ Charge
-                        </button>
-                      )}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        )}
-
-        {/* ORBITAL TAB */}
-        {activeTab === 'orbital' && (() => {
-          const totalDrain = getTotalEnergyDrain(state.omToggles || {});
-          const energyRegen = getEnergyRegen(state);
-          const maxEnergy = getMaxEnergy(state);
-          const netEnergy = energyRegen - totalDrain;
-          const isSustainable = netEnergy >= 0;
-          const activeToggleCount = Object.values(state.omToggles || {}).filter(Boolean).length;
-          const toggleOMs = unlockedOM.filter(om => om.isToggle);
-          const oneShotOMs = unlockedOM.filter(om => !om.isToggle);
+              </button>
+            );
+          }
 
           return (
-            <div>
-              {/* Energy Status Header */}
-              <div className={`card mb-4 ${isSustainable ? 'border-green' : 'border-red'}`} style={{borderWidth: '2px'}}>
-                <div className="flex items-center justify-between mb-1">
-                  <span className="font-bold text-base">⚡ Energy</span>
-                  <span className="text-base font-bold" style={{color: isSustainable ? 'var(--color-green)' : 'var(--color-red)'}}>
-                    {Math.floor(state.energy)}/{maxEnergy}
-                  </span>
-                </div>
-                <div className="resource-bar mb-2">
-                  <div className="resource-bar-fill" style={{
-                    width: `${(state.energy / maxEnergy) * 100}%`,
-                    background: state.energy < 20 ? 'var(--color-red)' : isSustainable ? 'var(--color-green)' : 'var(--color-orange)'
-                  }} />
-                </div>
-                <div className="flex justify-between text-sm flex-wrap gap-1">
-                  <span className="badge badge-green">Regen +{energyRegen.toFixed(1)}/s</span>
-                  <span className="badge badge-orange">Drain −{totalDrain.toFixed(1)}/s</span>
-                  <span className="badge" style={{
-                    background: isSustainable ? 'rgba(0,255,136,0.15)' : 'rgba(255,51,102,0.15)',
-                    color: isSustainable ? 'var(--color-green)' : 'var(--color-red)',
-                    border: `1px solid ${isSustainable ? 'rgba(0,255,136,0.3)' : 'rgba(255,51,102,0.3)'}`,
-                  }}>
-                    Net {netEnergy >= 0 ? '+' : ''}{netEnergy.toFixed(1)}/s
-                  </span>
-                </div>
-                {activeToggleCount > 0 && (
-                  <div className="text-xs text-gray-400 mt-1.5">{activeToggleCount} toggle{activeToggleCount !== 1 ? 's' : ''} active</div>
-                )}
-              </div>
+            <button
+              key={tab.id}
+              onClick={() => handleTabSwitch(tab.id)}
+              className={`flex-shrink-0 px-3 py-1.5 rounded text-xs font-medium transition-colors ${
+                isActive
+                  ? 'bg-blue-600 text-white'
+                  : 'bg-gray-800 text-gray-300 hover:bg-gray-700'
+              }`}
+            >
+              {tab.emoji} {tab.label}
+            </button>
+          );
+        })}
+        {state.devMode && (
+          <button
+            onClick={() => handleTabSwitch('dev')}
+            className={`flex-shrink-0 px-3 py-1.5 rounded text-xs font-medium transition-colors ${
+              state.activeTab === 'dev' ? 'bg-red-600 text-white' : 'bg-gray-800 text-red-400 hover:bg-gray-700'
+            }`}
+          >
+            🔧 Dev
+          </button>
+        )}
+      </div>
+    );
+  }
 
-              {/* Toggle Mechanics */}
-              <div className="section-header"><h2 className="glow-purple text-lg font-bold">Toggles</h2></div>
-              <div className="text-xs text-gray-400 mb-2 px-1">Click to turn ON/OFF. Drains energy while active.</div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 mb-4">
-                {toggleOMs.map(om => {
-                  const isOn = state.omToggles?.[om.id] || false;
-                  const canAffordStartup = state.energy >= om.energyCost;
-                  const canToggle = isOn || canAffordStartup;
-                  return (
-                    <button
-                      key={om.id}
-                      className={`card text-left relative transition-all ${
-                        isOn
-                          ? 'border-green box-glow-green'
-                          : canToggle
-                          ? 'hover:border-neon'
-                          : 'opacity-50'
-                      }`}
-                      onClick={() => handleOM(om.id)}
-                      disabled={!canToggle}
-                    >
-                      <div className={`absolute top-2 right-2 text-xs font-bold px-2 py-0.5 rounded-full ${
-                        isOn ? 'bg-green text-space' : 'bg-gray-700 text-gray-400'
-                      }`}>
-                        {isOn ? 'ON' : 'OFF'}
-                      </div>
-                      <div className="flex items-center gap-2 pr-12">
-                        <span className="text-lg">{om.emoji}</span>
-                        <span className="font-bold text-sm">{om.name}</span>
-                      </div>
-                      <div className="text-sm text-gray-400 mt-1">{om.desc}</div>
-                      <div className="flex gap-2 mt-2">
-                        <span className="badge badge-orange">{om.energyCost}E start</span>
-                        <span className="badge" style={{background: 'rgba(255,51,102,0.15)', color: 'var(--color-red)', border: '1px solid rgba(255,51,102,0.3)'}}>−{om.energyDrain}/s</span>
-                      </div>
-                    </button>
-                  );
-                })}
-              </div>
+  function renderHeader() {
+    return (
+      <div className="bg-gray-900 px-3 py-2 border-b border-gray-800">
+        <div className="flex items-center justify-between mb-1">
+          <div className="flex items-center gap-2">
+            <span className="text-lg">{tierDef.emoji}</span>
+            <span className="text-white font-bold text-sm">{tierDef.name}</span>
+          </div>
+          <div className="flex items-center gap-2 text-xs">
+            <span className="text-yellow-400">💎 {fmt(state.currentShards)}</span>
+            {state.activeBoosts.velocityDouble.active && (
+              <span className="text-green-400 animate-pulse">⚡2x Vel</span>
+            )}
+          </div>
+        </div>
+        <div className="grid grid-cols-4 gap-2 text-center">
+          <div>
+            <div className="text-gray-400 text-[10px]">Mass</div>
+            <div className="text-white text-xs font-bold">{fmtKg(state.mass)}</div>
+            <div className="text-green-400 text-[10px]">{fmtRate(prod.massPerSec)}</div>
+          </div>
+          <div>
+            <div className="text-gray-400 text-[10px]">Density</div>
+            <div className="text-cyan-300 text-xs font-bold">{fmt(getDensity(state))}</div>
+            <div className="text-green-400 text-[10px]">{fmtRate(prod.densityPerSec)}</div>
+          </div>
+          <div>
+            <div className="text-gray-400 text-[10px]">Velocity</div>
+            <div className="text-purple-300 text-xs font-bold">{fmt(state.velocity)}</div>
+            <div className="text-green-400 text-[10px]">{fmtRate(prod.velocityPerSec)}</div>
+          </div>
+          <div>
+            <div className="text-gray-400 text-[10px]">Energy</div>
+            <div className="text-yellow-300 text-xs font-bold">{fmt(state.energy)}</div>
+            <div className="text-green-400 text-[10px]">{fmtRate(prod.energyPerSec)}</div>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
-              {/* One-Shot Mechanics */}
-              {oneShotOMs.length > 0 && (
-                <>
-                  <div className="section-header"><h2 className="glow-orange text-lg font-bold">One-Shots</h2></div>
-                  <div className="text-xs text-gray-400 mb-2 px-1">Activate for a burst effect. Has cooldown.</div>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-                    {oneShotOMs.map(om => {
-                      const cd = state.omCooldowns[om.id] || 0;
-                      const isActive = (state.omActive[om.id] || 0) > 0;
-                      const canUse = state.energy >= om.energyCost && cd <= 0 && !(om.id === 'singularity_pull' && state.singularityUsed);
-                      return (
-                        <button
-                          key={om.id}
-                          className={`card text-left relative ${
-                            isActive
-                              ? 'border-purple box-glow-purple'
-                              : canUse
-                              ? 'hover:border-neon'
-                              : 'opacity-50'
-                          }`}
-                          onClick={() => handleOM(om.id)}
-                          disabled={!canUse}
-                        >
-                          <div className="flex items-center gap-2">
-                            <span className="text-lg">{om.emoji}</span>
-                            <span className="font-bold text-sm">{om.name}</span>
-                          </div>
-                          <div className="text-sm text-gray-400 mt-1">{om.desc}</div>
-                          <div className="flex gap-2 mt-2 flex-wrap">
-                            <span className="badge badge-orange">{om.energyCost}E</span>
-                            <span className="badge badge-cyan">{om.duration > 0 ? `${om.duration}s` : 'Once/run'}</span>
-                            <span className={`badge ${cd > 0 ? '' : 'badge-green'}`} style={cd > 0 ? {background: 'rgba(255,51,102,0.15)', color: 'var(--color-red)', border: '1px solid rgba(255,51,102,0.3)'} : undefined}>
-                              {om.id === 'singularity_pull' && state.singularityUsed
-                                ? 'Used'
-                                : cd > 0
-                                ? `${cd.toFixed(1)}s`
-                                : 'Ready'}
-                            </span>
-                          </div>
-                          {isActive && (
-                            <div className="absolute top-2 right-2 badge badge-purple">
-                              {state.omActive[om.id]?.toFixed(1)}s
-                            </div>
-                          )}
-                        </button>
-                      );
-                    })}
-                  </div>
-                </>
+  function renderMetalsTab() {
+    return (
+      <div>
+        {/* Click asteroid */}
+        <div className="flex flex-col items-center py-4 relative select-none">
+          <button
+            onClick={handleClick}
+            onTouchStart={handleClick}
+            className="text-6xl active:scale-110 transition-transform cursor-pointer"
+            style={{ WebkitTapHighlightColor: 'transparent' }}
+          >
+            {tierDef.emoji}
+          </button>
+          <div className="text-gray-400 text-xs mt-1">
+            +{fmtKg(clickVal)} per click {clickCombo > 5 && <span className="text-yellow-400">x{clickCombo} combo!</span>}
+          </div>
+          {/* Floating numbers */}
+          {floatingNums.map(f => (
+            <div
+              key={f.id}
+              className="absolute text-yellow-400 font-bold text-sm pointer-events-none animate-float-up"
+              style={{ left: f.x, top: f.y }}
+            >
+              +{fmtKg(f.value)}
+            </div>
+          ))}
+        </div>
+
+        {/* Buy mode selector */}
+        <div className="flex gap-1 px-3 mb-2">
+          {([1, 10, 100, 'max'] as BuyMode[]).map(mode => (
+            <button
+              key={mode}
+              onClick={() => setState({ ...stateRef.current, buyMode: mode })}
+              className={`flex-1 py-1 text-xs rounded font-medium ${
+                state.buyMode === mode ? 'bg-blue-600 text-white' : 'bg-gray-800 text-gray-400'
+              }`}
+            >
+              {mode === 'max' ? 'MAX' : `x${mode}`}
+            </button>
+          ))}
+        </div>
+
+        {/* Metal deposits */}
+        <div className="px-3">
+          {METALS.map(def => renderBuildingCard(def, 'metals'))}
+        </div>
+      </div>
+    );
+  }
+
+  function renderDensityTab() {
+    // Also show velocity unlock button if threshold met
+    const velUnlockDef = TAB_UNLOCKS.find(t => t.tabId === 'velocity');
+    const velThreshold = velUnlockDef?.velocityThreshold || 50;
+    const meetsVelThreshold = state.velocity >= velThreshold;
+    const showVelUnlockButton = velUnlockDef?.unlockViaImpact && !state.unlockedTabs['velocity'] && meetsVelThreshold && !state.velocityUnlockReady;
+
+    return (
+      <div>
+        <div className="px-3 pt-2 pb-1 text-gray-400 text-xs">
+          Spend density to build velocity. Density comes from your mass — spending density jettisons mass.
+        </div>
+
+        {/* Velocity unlock prompt */}
+        {showVelUnlockButton && (
+          <div className="mx-3 mb-2 bg-purple-900/50 border border-purple-500 rounded-lg p-3 text-center">
+            <div className="text-purple-300 text-sm font-bold mb-1">💨 Velocity Research Available!</div>
+            <div className="text-gray-400 text-xs mb-2">You've reached {fmt(velThreshold)} velocity. Unlock the Velocity tab through your next Impact!</div>
+            <button
+              onClick={handleVelocityUnlockReady}
+              className="bg-purple-600 hover:bg-purple-500 text-white px-4 py-2 rounded font-bold text-sm"
+            >
+              Unlock Through Impact
+            </button>
+          </div>
+        )}
+        {state.velocityUnlockReady && !state.unlockedTabs['velocity'] && (
+          <div className="mx-3 mb-2 bg-purple-900/30 border border-purple-700 rounded-lg p-2 text-center">
+            <div className="text-purple-400 text-xs">⏳ Velocity tab will unlock after your next Impact!</div>
+          </div>
+        )}
+
+        {/* Buy mode selector */}
+        <div className="flex gap-1 px-3 mb-2">
+          {([1, 10, 100, 'max'] as BuyMode[]).map(mode => (
+            <button
+              key={mode}
+              onClick={() => setState({ ...stateRef.current, buyMode: mode })}
+              className={`flex-1 py-1 text-xs rounded font-medium ${
+                state.buyMode === mode ? 'bg-blue-600 text-white' : 'bg-gray-800 text-gray-400'
+              }`}
+            >
+              {mode === 'max' ? 'MAX' : `x${mode}`}
+            </button>
+          ))}
+        </div>
+
+        <div className="px-3">
+          {DENSITY_ITEMS.map(def => renderBuildingCard(def, 'density'))}
+        </div>
+      </div>
+    );
+  }
+
+  function renderVelocityTab() {
+    return (
+      <div>
+        <div className="px-3 pt-2 pb-1 text-gray-400 text-xs">
+          Spend velocity to generate energy. Energy fuels expensive upgrades.
+        </div>
+        <div className="flex gap-1 px-3 mb-2">
+          {([1, 10, 100, 'max'] as BuyMode[]).map(mode => (
+            <button
+              key={mode}
+              onClick={() => setState({ ...stateRef.current, buyMode: mode })}
+              className={`flex-1 py-1 text-xs rounded font-medium ${
+                state.buyMode === mode ? 'bg-blue-600 text-white' : 'bg-gray-800 text-gray-400'
+              }`}
+            >
+              {mode === 'max' ? 'MAX' : `x${mode}`}
+            </button>
+          ))}
+        </div>
+        <div className="px-3">
+          {VELOCITY_ITEMS.map(def => renderBuildingCard(def, 'velocity'))}
+        </div>
+      </div>
+    );
+  }
+
+  function renderConverterTab() {
+    return (
+      <div className="px-3 pt-2">
+        <div className="text-gray-400 text-xs mb-3">Trade resources between mass, density, and velocity.</div>
+
+        {/* Jettison notification */}
+        {jettisonMsg && (
+          <div className="bg-orange-900/50 border border-orange-500 rounded-lg p-2 mb-3 text-center">
+            <div className="text-orange-300 text-xs font-bold">{jettisonMsg}</div>
+          </div>
+        )}
+
+        {CONVERTERS.map(conv => {
+          const fromVal = conv.from === 'mass' ? state.mass : conv.from === 'density' ? getDensity(state) : state.velocity;
+          const amount = converterAmounts[conv.id] || 0;
+          const gained = amount * conv.rate;
+          const presets = getConvertPresets(fromVal);
+          const isDensityFrom = conv.from === 'density';
+          const massEquiv = isDensityFrom ? amount * MASS_PER_DENSITY : 0;
+
+          return (
+            <div key={conv.id} className="bg-gray-800 rounded-lg p-3 mb-2">
+              <div className="flex items-center gap-2 mb-2">
+                <span className="text-lg">{conv.emoji}</span>
+                <span className="text-white font-medium text-sm">{conv.name}</span>
+                <span className="text-gray-500 text-xs ml-auto">Rate: {conv.rate}</span>
+              </div>
+              <div className="text-gray-400 text-xs mb-1">
+                Available: {fmt(fromVal)} {conv.from} → {amount > 0 ? `${fmt(gained)} ${conv.to}` : '...'}
+              </div>
+              {isDensityFrom && amount > 0 && (
+                <div className="text-orange-400 text-[10px] mb-2">
+                  Jettisoning {fmtKg(massEquiv)} of mass
+                </div>
               )}
+              <div className="flex gap-1 mb-2">
+                {['10%', '25%', '50%', '100%'].map((label, i) => (
+                  <button
+                    key={label}
+                    onClick={() => setConverterAmounts(prev => ({ ...prev, [conv.id]: presets[i] }))}
+                    className="flex-1 py-1 text-xs rounded bg-gray-700 text-gray-300 hover:bg-gray-600"
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+              <button
+                onClick={() => handleConvert(conv.id)}
+                disabled={amount <= 0 || amount > fromVal}
+                className={`w-full py-2 rounded text-sm font-bold ${
+                  amount > 0 && amount <= fromVal
+                    ? 'bg-green-600 hover:bg-green-500 text-white'
+                    : 'bg-gray-700 text-gray-500 cursor-not-allowed'
+                }`}
+              >
+                Convert {amount > 0 ? fmt(amount) : '0'} {conv.from}
+              </button>
             </div>
           );
-        })()}
-
-        {/* UPGRADES TAB */}
-        {activeTab === 'upgrades' && (
-          <div>
-            <div className="section-header"><h2 className="glow-orange text-lg font-bold">Core Upgrades</h2></div>
-            <div className="flex items-center gap-2 mb-3 px-1">
-              <span className="text-sm text-gray-400">Shards:</span>
-              <span className="badge badge-yellow text-sm">{fmt(state.currentShards)} 💎</span>
-            </div>
-            {(['foundation', 'synergy', 'density', 'energy'] as const).map(path => (
-              <div key={path} className="mb-4">
-                <div className="section-header">
-                  <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider">{path} Path</h3>
-                </div>
-                <div className="space-y-2">
-                  {CORE_UPGRADES.filter(u => u.path === path).map(u => {
-                    const level = state.coreUpgrades[u.id] || 0;
-                    const maxed = level >= u.maxLevel;
-                    const cost = maxed ? 0 : getUpgradeCost(u, level);
-                    const canBuy = canPurchaseUpgrade(u, state);
-                    return (
-                      <div key={u.id} className={`card flex items-center justify-between ${maxed ? 'border-green opacity-70' : canBuy ? 'hover:border-orange' : 'opacity-40'}`}>
-                        <div className="min-w-0">
-                          <div className="flex items-center gap-2 flex-wrap">
-                            <span>{u.emoji}</span>
-                            <span className="font-bold text-sm">{u.name}</span>
-                            <span className="badge badge-cyan">Lv.{level}/{u.maxLevel}</span>
-                          </div>
-                          <div className="text-sm text-gray-400 mt-0.5">{u.desc}</div>
-                        </div>
-                        {!maxed && (
-                          <button className="btn-secondary text-sm ml-3 shrink-0" disabled={!canBuy} onClick={() => handleUpgrade(u.id)}>
-                            {fmt(cost)} 💎
-                          </button>
-                        )}
-                        {maxed && <span className="badge badge-green">MAX</span>}
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-
-        {/* IMPACT (PRESTIGE) TAB */}
-        {activeTab === 'prestige' && (
-          <div>
-            <div className="section-header"><h2 className="glow-cyan text-lg font-bold">💥 Impact</h2></div>
-            <div className="card mb-4">
-              <div className="stat-row">
-                <span className="text-sm text-gray-400">Current Tier</span>
-                <span className="glow-cyan font-bold">{currentTierDef.emoji} {currentTierDef.name}</span>
-              </div>
-              <div className="stat-row">
-                <span className="text-sm text-gray-400">Lifetime Shards</span>
-                <span className="badge badge-yellow">{fmt(state.lifetimeShards)}</span>
-              </div>
-              <div className="stat-row">
-                <span className="text-sm text-gray-400">Available Shards</span>
-                <span className="badge badge-yellow">{fmt(state.currentShards)}</span>
-              </div>
-              <div className="stat-row">
-                <span className="text-sm text-gray-400">Total Impacts</span>
-                <span className="text-neon font-bold">{state.totalPrestigeCount}</span>
-              </div>
-              {nextTierDef && (
-                <div className="mt-3 pt-2 border-t border-gray-700">
-                  <div className="text-sm text-gray-400 mb-1">Next: <span className="font-bold text-white">{nextTierDef.emoji} {nextTierDef.name}</span> — {fmt(nextTierDef.shardReq)} lifetime shards</div>
-                  <div className="resource-bar mt-1">
-                    <div className="resource-bar-fill bg-yellow" style={{width: `${Math.min(100, (state.lifetimeShards / nextTierDef.shardReq) * 100)}%`}} />
-                  </div>
-                </div>
-              )}
-            </div>
-            <div className="card mb-4">
-              <div className="stat-row">
-                <span className="text-sm text-gray-400">Run Mass</span>
-                <span className="glow-cyan font-bold">{fmt(state.runMassEarned)}</span>
-              </div>
-              <div className="stat-row">
-                <span className="text-sm text-gray-400">Shards on Impact</span>
-                <span className="badge badge-yellow text-sm font-bold">{fmt(shardsOnPrestige)}</span>
-              </div>
-              <button className="btn-primary mt-3 w-full" disabled={!canPrestige(state)} onClick={() => setShowImpactWarning(true)}>
-                {canPrestige(state) ? `Impact for ${fmt(shardsOnPrestige)} Shards` : 'Need more mass to impact'}
-              </button>
-              <div className="text-xs text-gray-400 mt-2 px-1">Impact resets mass, gravity, density, processes and orbital mechanics. Core upgrades, discoveries, and forge bonuses persist.</div>
-            </div>
-            {state.composition && (
-              <div className="card">
-                <div className="stat-row">
-                  <span className="text-sm text-gray-400">Composition</span>
-                  <span className="badge badge-purple">{COMPOSITIONS.find(c => c.id === state.composition)?.name}</span>
-                </div>
-                <div className="text-xs text-gray-400 mt-1 px-1">You can change composition when you impact.</div>
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* DISCOVER TAB */}
-        {activeTab === 'discover' && (
-          <div>
-            <div className="section-header"><h2 className="glow-orange text-lg font-bold">Discoveries</h2></div>
-            <div className="flex items-center gap-2 mb-3 px-1">
-              <span className="text-sm text-gray-400">Found:</span>
-              <span className="badge badge-orange">{state.discoveries.length}/{DISCOVERIES.length}</span>
-            </div>
-            <div className="space-y-2.5">
-              {DISCOVERIES.filter(d => !d.hidden).map(d => {
-                const found = state.discoveries.includes(d.id);
-                return (
-                  <div key={d.id} className={`card ${found ? 'border-orange' : 'opacity-40'}`}>
-                    <div className="flex items-center gap-2">
-                      <span className="text-lg">{found ? d.emoji : '❓'}</span>
-                      <span className="font-bold text-sm">{found ? d.name : '???'}</span>
-                    </div>
-                    <div className="text-sm text-gray-400 mt-1">{found ? d.desc : d.hint}</div>
-                    {found && <div className="mt-1.5"><span className="badge badge-orange">{d.bonusDesc}</span></div>}
-                  </div>
-                );
-              })}
-            </div>
-            <div className="glow-divider mt-4 mb-3" />
-            <div className="section-header"><h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider">Hidden Achievements</h3></div>
-            <div className="space-y-2.5">
-              {DISCOVERIES.filter(d => d.hidden).map(d => {
-                const found = state.discoveries.includes(d.id);
-                if (!found) {
-                  return (
-                    <div key={d.id} className="card opacity-30">
-                      <div className="flex items-center gap-2">
-                        <span className="text-lg">🔒</span>
-                        <span className="font-bold text-sm">???</span>
-                      </div>
-                      <div className="text-sm text-gray-400 mt-1">Do something unexpected...</div>
-                    </div>
-                  );
-                }
-                return (
-                  <div key={d.id} className="card border-purple box-glow-purple">
-                    <div className="flex items-center gap-2">
-                      <span className="text-lg">{d.emoji}</span>
-                      <span className="font-bold text-sm">{d.name}</span>
-                      <span className="badge badge-purple">SECRET</span>
-                    </div>
-                    <div className="text-sm text-gray-400 mt-1">{d.desc}</div>
-                    <div className="mt-1.5"><span className="badge badge-purple">{d.bonusDesc}</span></div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        )}
-
-        {/* FORGE TAB */}
-        {activeTab === 'forge' && (
-          <div>
-            <div className="section-header"><h2 className="glow-orange text-lg font-bold">Forge</h2></div>
-            <div className="card mb-4">
-              <div className="text-sm text-gray-300 px-1">
-                Spend <span className="text-cyan font-bold">gravity</span> and <span className="text-purple font-bold">density</span> to forge permanent bonuses that persist through impact. Forging costs a LOT — you&#39;ll need to rebuild after each purchase. Watch out: gravity above 250 causes <span className="text-red font-bold">OVERLOAD</span> (mass penalty) and density above 85% causes <span className="text-red font-bold">OVERHEAT</span> (energy drain). Use Gravity Brake and Density Vent to stay in the safe zone!
-              </div>
-            </div>
-
-            {/* Gravity Forges */}
-            <div className="section-header mt-4"><h3 className="text-sm font-bold text-cyan uppercase tracking-wider">Gravity Forges</h3></div>
-            <div className="text-xs text-gray-400 mb-2 px-1">Available: <span className="text-cyan font-bold">{fmt(state.gravity, 0)}</span> gravity</div>
-            <div className="space-y-2.5 mb-4">
-              {getUnlockedForges(state.currentTier).filter(f => f.resource === 'gravity').map(f => {
-                const level = state.forgeLevels[f.id] || 0;
-                const maxed = level >= f.maxLevel;
-                const cost = maxed ? 0 : getForgeCost(f, level);
-                const affordable = canForge(f, state);
-                return (
-                  <div key={f.id} className={`card flex items-center justify-between ${maxed ? 'border-yellow' : affordable ? 'hover:border-neon' : 'opacity-60'}`}>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <span className="text-lg">{f.emoji}</span>
-                        <span className="font-bold text-base">{f.name}</span>
-                        <span className="badge badge-cyan">{level}/{f.maxLevel}</span>
-                      </div>
-                      <div className="text-sm text-gray-400 mt-1">{f.desc}</div>
-                      <div className="mt-1.5"><span className="badge badge-green">{f.effect}</span></div>
-                    </div>
-                    <button className="btn-primary text-sm ml-3 shrink-0 min-w-[5.5rem] text-center" disabled={!affordable || maxed} onClick={() => handleForge(f.id)}>
-                      {maxed ? 'MAX' : `${fmt(cost, 0)} grav`}
-                    </button>
-                  </div>
-                );
-              })}
-            </div>
-
-            {/* Density Forges */}
-            <div className="section-header"><h3 className="text-sm font-bold text-purple uppercase tracking-wider">Density Forges</h3></div>
-            <div className="text-xs text-gray-400 mb-2 px-1">Available: <span className="text-purple font-bold">{state.density.toFixed(1)}%</span> density</div>
-            <div className="space-y-2.5 mb-4">
-              {getUnlockedForges(state.currentTier).filter(f => f.resource === 'density').map(f => {
-                const level = state.forgeLevels[f.id] || 0;
-                const maxed = level >= f.maxLevel;
-                const cost = maxed ? 0 : getForgeCost(f, level);
-                const affordable = canForge(f, state);
-                return (
-                  <div key={f.id} className={`card flex items-center justify-between ${maxed ? 'border-yellow' : affordable ? 'hover:border-neon' : 'opacity-60'}`}>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <span className="text-lg">{f.emoji}</span>
-                        <span className="font-bold text-base">{f.name}</span>
-                        <span className="badge badge-purple">{level}/{f.maxLevel}</span>
-                      </div>
-                      <div className="text-sm text-gray-400 mt-1">{f.desc}</div>
-                      <div className="mt-1.5"><span className="badge badge-green">{f.effect}</span></div>
-                    </div>
-                    <button className="btn-primary text-sm ml-3 shrink-0 min-w-[5.5rem] text-center" disabled={!affordable || maxed} onClick={() => handleForge(f.id)}>
-                      {maxed ? 'MAX' : `${cost}% dens`}
-                    </button>
-                  </div>
-                );
-              })}
-            </div>
-
-            {/* Active Forge Bonuses summary */}
-            {Object.keys(state.forgeLevels).length > 0 && (
-              <div className="card">
-                <div className="section-header"><h3 className="text-sm font-bold text-yellow uppercase tracking-wider">Active Bonuses</h3></div>
-                {(() => {
-                  const eff = getForgeEffects(state);
-                  return (
-                    <div className="space-y-1">
-                      {eff.massMult > 1 && <div className="stat-row"><span className="text-xs text-gray-400">Mass Production</span><span className="text-sm font-bold text-green">+{Math.round((eff.massMult - 1) * 100)}%</span></div>}
-                      {eff.clickMult > 1 && <div className="stat-row"><span className="text-xs text-gray-400">Click Power</span><span className="text-sm font-bold text-green">+{Math.round((eff.clickMult - 1) * 100)}%</span></div>}
-                      {eff.energyRegen > 0 && <div className="stat-row"><span className="text-xs text-gray-400">Energy Regen</span><span className="text-sm font-bold text-green">+{eff.energyRegen.toFixed(1)}/s</span></div>}
-                      {eff.shardMult > 1 && <div className="stat-row"><span className="text-xs text-gray-400">Shard Generation</span><span className="text-sm font-bold text-green">+{Math.round((eff.shardMult - 1) * 100)}%</span></div>}
-                      {eff.densityDecayReduction < 1 && <div className="stat-row"><span className="text-xs text-gray-400">Density Decay</span><span className="text-sm font-bold text-green">-{Math.round((1 - eff.densityDecayReduction) * 100)}%</span></div>}
-                    </div>
-                  );
-                })()}
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* STATS TAB */}
-        {activeTab === 'stats' && (
-          <div>
-            <div className="section-header"><h2 className="glow-cyan text-lg font-bold">Statistics</h2></div>
-            <div className="card mb-4">
-              <div className="stat-row"><span className="text-sm text-gray-400">Total Mass Earned</span><span className="glow-cyan font-bold">{fmt(state.totalMassEarned)}</span></div>
-              <div className="stat-row"><span className="text-sm text-gray-400">Highest Mass</span><span className="text-neon font-bold">{fmt(state.highestMass)}</span></div>
-              <div className="stat-row"><span className="text-sm text-gray-400">Total Clicks</span><span className="text-neon font-bold">{fmt(state.totalClicks)}</span></div>
-              <div className="stat-row"><span className="text-sm text-gray-400">Total Play Time</span><span className="text-neon">{fmtTime(state.totalPlayTime)}</span></div>
-              <div className="stat-row"><span className="text-sm text-gray-400">Run Time</span><span className="text-neon">{fmtTime(state.runTime)}</span></div>
-              <div className="stat-row"><span className="text-sm text-gray-400">Comets Caught</span><span className="text-neon font-bold">{state.cometsCaught}</span></div>
-              <div className="stat-row"><span className="text-sm text-gray-400">Impact Count</span><span className="text-neon font-bold">{state.totalPrestigeCount}</span></div>
-            </div>
-            <div className="section-header"><h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider">Settings</h3></div>
-            <div className="space-y-2">
-              <button className="btn-secondary w-full text-sm" onClick={() => { saveGame(state); addToast('Game saved!', '💾'); }}>Manual Save</button>
-              <button className="btn-secondary w-full text-sm" onClick={() => { const code = exportSave(state); navigator.clipboard.writeText(code); addToast('Save exported to clipboard!', '📋'); }}>Export Save</button>
-              <button className="btn-secondary w-full text-sm" onClick={() => {
-                const code = prompt('Paste save code:');
-                if (code) {
-                  const imported = importSave(code);
-                  if (imported) { setState(imported); addToast('Save imported!', '📥'); }
-                  else addToast('Invalid save code', '❌');
-                }
-              }}>Import Save</button>
-              <button className="btn-danger w-full text-sm" onClick={() => {
-                if (confirm('Are you sure? This deletes ALL progress!')) {
-                  hardReset();
-                  setState(defaultGameState());
-                  setTutorialStep(0);
-                  addToast('Game reset!', '🗑️');
-                }
-              }}>Hard Reset</button>
-            </div>
-            <div className="glow-divider mt-4 mb-3" />
-            <div className="section-header"><h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider">Feedback</h3></div>
-            <div className="card">
-              <FeedbackForm
-                state={state}
-                inline={true}
-                onSubmit={(success) => {
-                  if (success) addToast('Feedback sent! Thanks!', '💬');
-                  else addToast('Failed to send feedback', '❌');
-                }}
-              />
-            </div>
-            {/* Developer Mode Passcode */}
-            {!state.devMode && (
-              <div className="mt-4">
-                <div className="glow-divider mb-3" />
-                <div className="flex items-center gap-2">
-                  <input
-                    type="password"
-                    placeholder="Dev passcode..."
-                    className="flex-1 bg-space-lighter border border-gray-700 rounded-md px-3 py-1.5 text-sm text-white focus:border-neon focus:outline-none"
-                    value={devPasscode}
-                    onChange={(e) => setDevPasscode(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter' && devPasscode === '89116282') {
-                        setState({ ...stateRef.current, devMode: true });
-                        setDevPasscode('');
-                        addToast('Developer mode unlocked!', '🛠️');
-                      }
-                    }}
-                  />
-                  <button className="btn-secondary text-sm px-3 py-1.5" onClick={() => {
-                    if (devPasscode === '89116282') {
-                      setState({ ...stateRef.current, devMode: true });
-                      setDevPasscode('');
-                      addToast('Developer mode unlocked!', '🛠️');
-                    } else {
-                      addToast('Invalid passcode', '❌');
-                      setDevPasscode('');
-                    }
-                  }}>Unlock</button>
-                </div>
-              </div>
-            )}
-            {state.devMode && (
-              <div className="mt-4">
-                <div className="glow-divider mb-3" />
-                <span className="badge badge-yellow">🛠️ Dev Mode Active</span>
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* DEV TAB */}
-        {activeTab === 'dev' && state.devMode && (
-          <div>
-            <div className="section-header"><h2 className="text-lg font-bold text-yellow">🛠️ Developer Tools</h2></div>
-
-            {/* Mass Controls */}
-            <div className="card mb-3">
-              <div className="text-sm font-bold text-cyan mb-2">Mass — Current: {fmt(state.mass)}</div>
-              <div className="grid grid-cols-2 gap-2">
-                <button className="btn-secondary text-xs py-2" onClick={() => setState({ ...stateRef.current, mass: stateRef.current.mass + 1000 })}>+1,000</button>
-                <button className="btn-secondary text-xs py-2" onClick={() => setState({ ...stateRef.current, mass: stateRef.current.mass + 1000000 })}>+1M</button>
-                <button className="btn-secondary text-xs py-2" onClick={() => setState({ ...stateRef.current, mass: stateRef.current.mass + 1000000000 })}>+1B</button>
-                <button className="btn-secondary text-xs py-2" onClick={() => { const s = stateRef.current; setState({ ...s, mass: s.mass * 6, runMassEarned: s.runMassEarned + s.mass * 5, totalMassEarned: s.totalMassEarned + s.mass * 5 }); }}>+500% current</button>
-              </div>
-            </div>
-
-            {/* Gravity Controls */}
-            <div className="card mb-3">
-              <div className="text-sm font-bold text-cyan mb-2">Gravity — Current: {fmt(state.gravity, 1)}</div>
-              <div className="grid grid-cols-2 gap-2">
-                <button className="btn-secondary text-xs py-2" onClick={() => setState({ ...stateRef.current, gravity: Math.min(300, stateRef.current.gravity + 25) })}>+25</button>
-                <button className="btn-secondary text-xs py-2" onClick={() => setState({ ...stateRef.current, gravity: Math.min(300, stateRef.current.gravity + 100) })}>+100</button>
-                <button className="btn-secondary text-xs py-2" onClick={() => setState({ ...stateRef.current, gravity: 300 })}>Max (300)</button>
-                <button className="btn-secondary text-xs py-2" onClick={() => setState({ ...stateRef.current, gravity: 0 })}>Reset to 0</button>
-              </div>
-            </div>
-
-            {/* Density Controls */}
-            <div className="card mb-3">
-              <div className="text-sm font-bold text-purple mb-2">Density — Current: {state.density.toFixed(1)}%</div>
-              <div className="grid grid-cols-2 gap-2">
-                <button className="btn-secondary text-xs py-2" onClick={() => setState({ ...stateRef.current, density: Math.min(100, stateRef.current.density + 10) })}>+10%</button>
-                <button className="btn-secondary text-xs py-2" onClick={() => setState({ ...stateRef.current, density: Math.min(100, stateRef.current.density + 25) })}>+25%</button>
-                <button className="btn-secondary text-xs py-2" onClick={() => setState({ ...stateRef.current, density: 100 })}>Max (100%)</button>
-                <button className="btn-secondary text-xs py-2" onClick={() => setState({ ...stateRef.current, density: 0 })}>Reset to 0</button>
-              </div>
-            </div>
-
-            {/* Energy Controls */}
-            <div className="card mb-3">
-              <div className="text-sm font-bold text-orange mb-2">Energy — Current: {Math.floor(state.energy)}/{getMaxEnergy(state)}</div>
-              <div className="grid grid-cols-2 gap-2">
-                <button className="btn-secondary text-xs py-2" onClick={() => setState({ ...stateRef.current, energy: getMaxEnergy(stateRef.current) })}>Fill Energy</button>
-                <button className="btn-secondary text-xs py-2" onClick={() => setState({ ...stateRef.current, energy: 0 })}>Drain Energy</button>
-              </div>
-            </div>
-
-            {/* Shards Controls */}
-            <div className="card mb-3">
-              <div className="text-sm font-bold text-yellow mb-2">Shards — Current: {fmt(state.currentShards)} ({fmt(state.lifetimeShards)} lifetime)</div>
-              <div className="grid grid-cols-2 gap-2">
-                <button className="btn-secondary text-xs py-2" onClick={() => setState({ ...stateRef.current, currentShards: stateRef.current.currentShards + 100, lifetimeShards: stateRef.current.lifetimeShards + 100 })}>+100</button>
-                <button className="btn-secondary text-xs py-2" onClick={() => setState({ ...stateRef.current, currentShards: stateRef.current.currentShards + 1000, lifetimeShards: stateRef.current.lifetimeShards + 1000 })}>+1,000</button>
-                <button className="btn-secondary text-xs py-2" onClick={() => setState({ ...stateRef.current, currentShards: stateRef.current.currentShards + 100000, lifetimeShards: stateRef.current.lifetimeShards + 100000 })}>+100K</button>
-                <button className="btn-secondary text-xs py-2" onClick={() => setState({ ...stateRef.current, currentShards: stateRef.current.currentShards + 1000000, lifetimeShards: stateRef.current.lifetimeShards + 1000000 })}>+1M</button>
-              </div>
-            </div>
-
-            {/* Quick Actions */}
-            <div className="card mb-3">
-              <div className="text-sm font-bold text-green mb-2">Quick Actions</div>
-              <div className="grid grid-cols-2 gap-2">
-                <button className="btn-secondary text-xs py-2" onClick={() => { const s = stateRef.current; setState({ ...s, runMassEarned: s.runMassEarned + 10000000, totalMassEarned: s.totalMassEarned + 10000000 }); }}>+10M Run Mass</button>
-                <button className="btn-secondary text-xs py-2" onClick={() => setState({ ...stateRef.current, cometsCaught: stateRef.current.cometsCaught + 50 })}>+50 Comets</button>
-                <button className="btn-secondary text-xs py-2" onClick={() => setState({ ...stateRef.current, totalClicks: stateRef.current.totalClicks + 1000 })}>+1000 Clicks</button>
-                <button className="btn-secondary text-xs py-2" onClick={() => { const s = stateRef.current; setState({ ...s, mass: s.mass * 6, gravity: Math.min(300, s.gravity + 100), density: Math.min(100, s.density + 30), currentShards: s.currentShards + 10000, lifetimeShards: s.lifetimeShards + 10000, runMassEarned: s.runMassEarned + s.mass * 5, totalMassEarned: s.totalMassEarned + s.mass * 5 }); }}>Boost Everything</button>
-              </div>
-            </div>
-
-            {/* Disable Dev Mode */}
-            <button className="btn-danger w-full text-sm mt-2" onClick={() => {
-              setState({ ...stateRef.current, devMode: false });
-              setTab('stats');
-              addToast('Developer mode disabled', '🔒');
-            }}>Disable Dev Mode</button>
-          </div>
-        )}
+        })}
       </div>
+    );
+  }
 
-      {/* Floating Mini Asteroid — appears when scrolled on Build tab */}
-      {showMiniAsteroid && (
+  function renderEnergyTab() {
+    return (
+      <div className="px-3 pt-2">
+        <div className="text-gray-400 text-xs mb-2">Spend energy on powerful upgrades and automation.</div>
+        <div className="text-yellow-300 text-xs mb-3">⚡ {fmt(state.energy)} energy available</div>
+
+        {ENERGY_UPGRADES.map(def => {
+          const level = state.energyUpgrades[def.id] || 0;
+          const maxed = level >= def.maxLevel;
+          const cost = getEnergyUpgradeCost(def, level);
+          const canBuy = !maxed && state.energy >= cost;
+
+          return (
+            <div key={def.id} className="bg-gray-800 rounded-lg p-3 mb-2">
+              <div className="flex justify-between items-start">
+                <div className="flex-1">
+                  <div className="flex items-center gap-2">
+                    <span className="text-lg">{def.emoji}</span>
+                    <span className="text-white font-medium text-sm">{def.name}</span>
+                    {def.isToggle ? (
+                      <span className={`text-xs ${level > 0 ? 'text-green-400' : 'text-gray-500'}`}>
+                        {level > 0 ? 'ON' : 'OFF'}
+                      </span>
+                    ) : (
+                      <span className="text-gray-400 text-xs">Lv {level}/{def.maxLevel}</span>
+                    )}
+                  </div>
+                  <p className="text-gray-400 text-xs mt-0.5">{def.desc}</p>
+                  <div className="text-green-400 text-xs mt-1">{def.effect}</div>
+                </div>
+                <button
+                  onClick={() => handleBuyEnergyUpgrade(def.id)}
+                  disabled={!canBuy}
+                  className={`ml-2 px-3 py-2 rounded text-xs font-bold min-w-[70px] transition-colors ${
+                    maxed ? 'bg-gray-700 text-green-400' :
+                    canBuy ? 'bg-yellow-600 hover:bg-yellow-500 text-white' :
+                    'bg-gray-700 text-gray-500 cursor-not-allowed'
+                  }`}
+                >
+                  {maxed ? 'MAX' : `⚡ ${fmt(cost)}`}
+                </button>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    );
+  }
+
+  function renderImpactTab() {
+    return (
+      <div className="px-3 pt-2">
+        {/* Prestige info */}
+        <div className="bg-gray-800 rounded-lg p-4 mb-3 text-center">
+          <div className="text-4xl mb-2">💥</div>
+          <div className="text-white font-bold text-lg mb-1">Impact</div>
+          <div className="text-gray-400 text-xs mb-3">
+            Reset your resources and buildings to earn Impact Shards. Shards unlock tabs and permanent upgrades.
+          </div>
+          <div className="text-yellow-400 text-sm mb-1">
+            Run Mass: {fmtKg(state.runMassEarned)}
+          </div>
+          <div className="text-yellow-300 text-lg font-bold mb-3">
+            {canDoImpact ? `+${fmt(pendingShards)} shards` : 'Need 10,000 Kg mass this run'}
+          </div>
+          <button
+            onClick={handleImpact}
+            disabled={!canDoImpact}
+            className={`w-full py-3 rounded-lg font-bold text-lg transition-colors ${
+              canDoImpact
+                ? 'bg-red-600 hover:bg-red-500 text-white'
+                : 'bg-gray-700 text-gray-500 cursor-not-allowed'
+            }`}
+          >
+            {canDoImpact ? '💥 IMPACT!' : '🔒 Keep Mining...'}
+          </button>
+        </div>
+
+        {/* Tab unlocks */}
+        <div className="text-gray-300 text-sm font-bold mb-2">Tab Unlocks</div>
+        {TAB_UNLOCKS.map(def => {
+          const unlocked = state.unlockedTabs[def.tabId];
+          const canUnlock = !unlocked && state.currentShards >= def.shardCost && state.totalPrestigeCount >= def.requiresPrestige;
+
+          // Special velocity tab unlock
+          if (def.unlockViaImpact) {
+            const threshold = def.velocityThreshold || 50;
+            const met = state.velocity >= threshold;
+            return (
+              <div key={def.tabId} className={`bg-gray-800 rounded-lg p-3 mb-2 ${unlocked ? 'opacity-60' : ''}`}>
+                <div className="flex items-center gap-2">
+                  <span className="text-lg">{def.emoji}</span>
+                  <span className="text-white font-medium text-sm">{def.name}</span>
+                  {unlocked && <span className="text-green-400 text-xs ml-auto">✅ Unlocked</span>}
+                  {!unlocked && state.velocityUnlockReady && <span className="text-purple-400 text-xs ml-auto">⏳ Next Impact</span>}
+                  {!unlocked && !state.velocityUnlockReady && (
+                    <span className="text-gray-500 text-xs ml-auto">
+                      {met ? '✅ Ready' : `${fmt(threshold)} velocity needed`}
+                    </span>
+                  )}
+                </div>
+                <p className="text-gray-400 text-xs mt-1">{def.desc}</p>
+              </div>
+            );
+          }
+
+          return (
+            <div key={def.tabId} className={`bg-gray-800 rounded-lg p-3 mb-2 ${unlocked ? 'opacity-60' : ''}`}>
+              <div className="flex justify-between items-center">
+                <div className="flex items-center gap-2">
+                  <span className="text-lg">{def.emoji}</span>
+                  <span className="text-white font-medium text-sm">{def.name}</span>
+                </div>
+                {unlocked ? (
+                  <span className="text-green-400 text-xs">✅ Unlocked</span>
+                ) : (
+                  <button
+                    onClick={() => handleBuyTabUnlock(def.tabId)}
+                    disabled={!canUnlock}
+                    className={`px-3 py-1 rounded text-xs font-bold ${
+                      canUnlock ? 'bg-yellow-600 text-white' : 'bg-gray-700 text-gray-500'
+                    }`}
+                  >
+                    💎 {def.shardCost} ({def.requiresPrestige} impacts req)
+                  </button>
+                )}
+              </div>
+              <p className="text-gray-400 text-xs mt-1">{def.desc}</p>
+            </div>
+          );
+        })}
+
+        {/* Shard upgrades */}
+        <div className="text-gray-300 text-sm font-bold mb-2 mt-4">Shard Upgrades (Permanent)</div>
+        {SHARD_UPGRADES.map(def => {
+          const level = state.shardUpgrades[def.id] || 0;
+          const maxed = level >= def.maxLevel;
+          const cost = getShardUpgradeCost(def, level);
+          const canBuy = !maxed && state.currentShards >= cost;
+
+          return (
+            <div key={def.id} className="bg-gray-800 rounded-lg p-3 mb-2">
+              <div className="flex justify-between items-start">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span>{def.emoji}</span>
+                    <span className="text-white text-sm">{def.name}</span>
+                    <span className="text-gray-400 text-xs">Lv {level}/{def.maxLevel}</span>
+                  </div>
+                  <p className="text-gray-400 text-xs">{def.effect}</p>
+                </div>
+                <button
+                  onClick={() => handleBuyShardUpgrade(def.id)}
+                  disabled={!canBuy}
+                  className={`ml-2 px-3 py-1 rounded text-xs font-bold ${
+                    maxed ? 'bg-gray-700 text-green-400' :
+                    canBuy ? 'bg-yellow-600 text-white' :
+                    'bg-gray-700 text-gray-500'
+                  }`}
+                >
+                  {maxed ? 'MAX' : `💎 ${fmt(cost)}`}
+                </button>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    );
+  }
+
+  function renderAchievementsTab() {
+    const visible = ACHIEVEMENTS.filter(a => !a.hidden);
+    const hidden = ACHIEVEMENTS.filter(a => a.hidden);
+    const earned = state.achievements;
+
+    return (
+      <div className="px-3 pt-2">
+        <div className="text-gray-400 text-xs mb-3">
+          Earned: {earned.length}/{ACHIEVEMENTS.length} ({hidden.filter(h => earned.includes(h.id)).length} hidden found)
+        </div>
+
+        {visible.map(a => {
+          const got = earned.includes(a.id);
+          return (
+            <div key={a.id} className={`bg-gray-800 rounded-lg p-3 mb-2 ${got ? '' : 'opacity-50'}`}>
+              <div className="flex items-center gap-2">
+                <span className="text-lg">{got ? a.emoji : '❓'}</span>
+                <span className="text-white text-sm font-medium">{a.name}</span>
+                {got && <span className="text-green-400 text-xs ml-auto">✅</span>}
+              </div>
+              <p className="text-gray-400 text-xs">{a.desc}</p>
+              <p className="text-green-400 text-xs">{a.bonusDesc}</p>
+            </div>
+          );
+        })}
+
+        {/* Hidden achievements section */}
+        <div className="text-gray-300 text-sm font-bold mt-4 mb-2">Hidden Achievements</div>
+        {hidden.map(a => {
+          const got = earned.includes(a.id);
+          return (
+            <div key={a.id} className={`bg-gray-800 rounded-lg p-3 mb-2`}>
+              <div className="flex items-center gap-2">
+                <span className="text-lg">{got ? a.emoji : '🔮'}</span>
+                <span className="text-white text-sm font-medium">{got ? a.name : '???'}</span>
+                {got && <span className="text-green-400 text-xs ml-auto">✅</span>}
+              </div>
+              <p className="text-gray-400 text-xs">{got ? a.desc : 'Do something special to discover this...'}</p>
+              {got && <p className="text-green-400 text-xs">{a.bonusDesc}</p>}
+            </div>
+          );
+        })}
+      </div>
+    );
+  }
+
+  function renderStatsTab() {
+    const comp = state.composition ? getCompositionDef(state.composition) : null;
+
+    return (
+      <div className="px-3 pt-2">
+        {/* Stats */}
+        <div className="bg-gray-800 rounded-lg p-3 mb-3">
+          <div className="text-white text-sm font-bold mb-2">Statistics</div>
+          <div className="space-y-1 text-xs">
+            <div className="flex justify-between"><span className="text-gray-400">Total Mass Earned</span><span className="text-white">{fmtKg(state.totalMassEarned)}</span></div>
+            <div className="flex justify-between"><span className="text-gray-400">Highest Mass</span><span className="text-white">{fmtKg(state.highestMass)}</span></div>
+            <div className="flex justify-between"><span className="text-gray-400">Total Clicks</span><span className="text-white">{fmt(state.totalClicks)}</span></div>
+            <div className="flex justify-between"><span className="text-gray-400">Total Impacts</span><span className="text-white">{state.totalPrestigeCount}</span></div>
+            <div className="flex justify-between"><span className="text-gray-400">Lifetime Shards</span><span className="text-white">{fmt(state.lifetimeShards)}</span></div>
+            <div className="flex justify-between"><span className="text-gray-400">Comets Caught</span><span className="text-white">{state.cometsCaught}</span></div>
+            <div className="flex justify-between"><span className="text-gray-400">Total Play Time</span><span className="text-white">{fmtTime(state.totalPlayTime)}</span></div>
+            <div className="flex justify-between"><span className="text-gray-400">This Run</span><span className="text-white">{fmtTime(state.runTime)}</span></div>
+            <div className="flex justify-between"><span className="text-gray-400">Fastest Impact</span><span className="text-white">{state.fastestPrestige < Infinity ? fmtTime(state.fastestPrestige) : '--'}</span></div>
+            <div className="flex justify-between"><span className="text-gray-400">Tier</span><span className="text-white">{tierDef.emoji} {tierDef.name}</span></div>
+            {comp && (
+              <div className="flex justify-between"><span className="text-gray-400">Composition</span><span className="text-white">{comp.emoji} {comp.name}</span></div>
+            )}
+          </div>
+        </div>
+
+        {/* Composition */}
+        {state.composition && comp && (
+          <div className="bg-gray-800 rounded-lg p-3 mb-3">
+            <div className="text-white text-sm font-bold mb-1">Composition: {comp.emoji} {comp.name}</div>
+            <p className="text-gray-400 text-xs mb-1">{comp.desc}</p>
+            <div className="text-xs space-y-0.5">
+              {comp.massMult !== 1 && <div className={comp.massMult > 1 ? 'text-green-400' : 'text-red-400'}>Mass: {fmtPercent(comp.massMult)}</div>}
+              {comp.densityMult !== 1 && <div className={comp.densityMult > 1 ? 'text-green-400' : 'text-red-400'}>Density: {fmtPercent(comp.densityMult)}</div>}
+              {comp.velocityMult !== 1 && <div className={comp.velocityMult > 1 ? 'text-green-400' : 'text-red-400'}>Velocity: {fmtPercent(comp.velocityMult)}</div>}
+              {comp.clickMult !== 1 && <div className={comp.clickMult > 1 ? 'text-green-400' : 'text-red-400'}>Click: {fmtPercent(comp.clickMult)}</div>}
+              {comp.cometMult !== 1 && <div className={comp.cometMult > 1 ? 'text-green-400' : 'text-red-400'}>Comet: {fmtPercent(comp.cometMult)}</div>}
+            </div>
+          </div>
+        )}
+
+        {/* Settings */}
+        <div className="bg-gray-800 rounded-lg p-3 mb-3">
+          <div className="text-white text-sm font-bold mb-2">Settings</div>
+          <div className="space-y-2">
+            <button
+              onClick={() => { saveGame(stateRef.current); }}
+              className="w-full py-2 bg-blue-700 hover:bg-blue-600 text-white text-xs rounded font-medium"
+            >
+              💾 Save Game
+            </button>
+            <button
+              onClick={() => setShowImportExport(true)}
+              className="w-full py-2 bg-gray-700 hover:bg-gray-600 text-white text-xs rounded font-medium"
+            >
+              📦 Import / Export
+            </button>
+            <button
+              onClick={() => setShowResetConfirm(true)}
+              className="w-full py-2 bg-red-900 hover:bg-red-800 text-red-300 text-xs rounded font-medium"
+            >
+              ⚠️ Hard Reset
+            </button>
+          </div>
+        </div>
+
+        {/* Dev passcode */}
+        {!state.devMode && (
+          <div className="bg-gray-800 rounded-lg p-3 mb-3">
+            <div className="flex gap-2">
+              <input
+                type="password"
+                value={devPasscode}
+                onChange={e => setDevPasscode(e.target.value)}
+                placeholder="Dev code"
+                className="flex-1 bg-gray-700 text-white text-xs px-2 py-1 rounded"
+              />
+              <button
+                onClick={handleDevPasscode}
+                className="bg-gray-600 text-gray-300 text-xs px-3 py-1 rounded"
+              >
+                Enter
+              </button>
+            </div>
+          </div>
+        )}
+
+        <div className="text-center text-gray-600 text-[10px] pb-4">
+          Impact v13.0
+        </div>
+      </div>
+    );
+  }
+
+  function renderDevTab() {
+    return (
+      <div className="px-3 pt-2">
+        <div className="text-red-400 text-sm font-bold mb-3">🔧 Developer Tools</div>
+        <div className="space-y-2">
+          <button onClick={() => setState({ ...stateRef.current, mass: stateRef.current.mass + 1000000 })} className="w-full py-2 bg-gray-800 text-white text-xs rounded">+1M Mass</button>
+          <button onClick={() => setState({ ...stateRef.current, mass: stateRef.current.mass + 1000000000 })} className="w-full py-2 bg-gray-800 text-white text-xs rounded">+1B Mass</button>
+          <button onClick={() => setState({ ...stateRef.current, density: stateRef.current.density + 10000 })} className="w-full py-2 bg-gray-800 text-cyan-300 text-xs rounded">+10K Density</button>
+          <button onClick={() => setState({ ...stateRef.current, velocity: stateRef.current.velocity + 10000 })} className="w-full py-2 bg-gray-800 text-purple-300 text-xs rounded">+10K Velocity</button>
+          <button onClick={() => setState({ ...stateRef.current, energy: stateRef.current.energy + 10000 })} className="w-full py-2 bg-gray-800 text-yellow-300 text-xs rounded">+10K Energy</button>
+          <button onClick={() => setState({ ...stateRef.current, currentShards: stateRef.current.currentShards + 1000, lifetimeShards: stateRef.current.lifetimeShards + 1000 })} className="w-full py-2 bg-gray-800 text-yellow-400 text-xs rounded">+1K Shards</button>
+          <button onClick={() => {
+            const s = stateRef.current;
+            setState({
+              ...s,
+              unlockedTabs: { density: true, velocity: true, converter: true, energy: true },
+            });
+          }} className="w-full py-2 bg-gray-800 text-green-400 text-xs rounded">Unlock All Tabs</button>
+          <button onClick={() => setState({ ...stateRef.current, totalPrestigeCount: stateRef.current.totalPrestigeCount + 10 })} className="w-full py-2 bg-gray-800 text-red-400 text-xs rounded">+10 Impact Count</button>
+        </div>
+
+        <div className="mt-4 bg-gray-800 rounded-lg p-3">
+          <div className="text-white text-xs font-bold mb-1">State Debug</div>
+          <div className="text-gray-400 text-[10px] space-y-0.5">
+            <div>Mass: {state.mass.toFixed(2)} | Density: {state.density.toFixed(4)} | Vel: {state.velocity.toFixed(4)} | Energy: {state.energy.toFixed(4)}</div>
+            <div>Run Mass: {state.runMassEarned.toFixed(2)} | Shards: {state.currentShards}/{state.lifetimeShards}</div>
+            <div>Tier: {state.currentTier} | Impacts: {state.totalPrestigeCount} | Comp: {state.composition || 'none'}</div>
+            <div>Tabs: {JSON.stringify(state.unlockedTabs)}</div>
+            <div>Metals: {JSON.stringify(state.metals)}</div>
+            <div>VelUnlockReady: {String(state.velocityUnlockReady)}</div>
+            <div>Comets: {state.activeComets.length} | Next: {state.nextCometIn.toFixed(1)}s</div>
+            <div>Version: {state.version}</div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  function renderActiveTab() {
+    switch (state.activeTab) {
+      case 'metals': return renderMetalsTab();
+      case 'density': return renderDensityTab();
+      case 'velocity': return renderVelocityTab();
+      case 'converter': return renderConverterTab();
+      case 'energy': return renderEnergyTab();
+      case 'impact': return renderImpactTab();
+      case 'achievements': return renderAchievementsTab();
+      case 'stats': return renderStatsTab();
+      case 'dev': return renderDevTab();
+      default: return renderMetalsTab();
+    }
+  }
+
+  // === MAIN RENDER ===
+  return (
+    <div className="min-h-screen bg-gray-950 text-white flex flex-col max-w-md mx-auto relative overflow-hidden" style={{ height: '100dvh' }}>
+      {/* Header */}
+      {renderHeader()}
+
+      {/* Ad boost banners */}
+      {state.shardAdAvailable && (
         <div
-          className="mini-asteroid"
-          style={{
-            left: miniPos.x,
-            top: miniPos.y === -1 ? 'calc(50vh - 28px)' : miniPos.y,
-          }}
-          onMouseDown={handleDragStart}
-          onTouchStart={handleDragStart}
-          onClick={handleMiniClick}
+          onClick={handleShardAd}
+          className="bg-yellow-900/80 border-b border-yellow-600 px-3 py-2 text-center cursor-pointer hover:bg-yellow-800/80 transition-colors"
         >
-          <div className="mini-asteroid-inner pulse-glow">{currentTierDef.emoji}</div>
-          <div className="mini-asteroid-mass">+{fmt(getClickValue(state, 1))}/tap</div>
+          <div className="text-yellow-300 text-xs font-bold">💎 Shard Bonus Available!</div>
+          <div className="text-yellow-200 text-[10px]">Tap to earn {fmt(Math.max(1, Math.floor(state.lifetimeShards * 0.1)))} shards</div>
+        </div>
+      )}
+      {state.velocityAdAvailable && (
+        <div
+          onClick={handleVelocityAd}
+          className="bg-purple-900/80 border-b border-purple-600 px-3 py-2 text-center cursor-pointer hover:bg-purple-800/80 transition-colors"
+        >
+          <div className="text-purple-300 text-xs font-bold">⚡ Velocity Boost Available!</div>
+          <div className="text-purple-200 text-[10px]">Tap to double velocity for 20 minutes</div>
         </div>
       )}
 
-      {/* Active Comets — tappable floating comets */}
-      {state.activeComets && state.activeComets.map(comet => (
-        <button
+      {/* Tab bar */}
+      {renderTabBar()}
+
+      {/* Content area */}
+      <div ref={scrollRef} className="flex-1 overflow-y-auto pb-4">
+        {renderActiveTab()}
+      </div>
+
+      {/* Floating comets */}
+      {state.activeComets.map(comet => (
+        <div
           key={comet.id}
-          className="comet-button"
+          onClick={() => handleCatchComet(comet.id)}
+          className="absolute cursor-pointer animate-pulse z-50"
           style={{
             left: `${comet.x}%`,
-            top: `${comet.y}%`,
-            opacity: comet.timeLeft < 1.5 ? comet.timeLeft / 1.5 : 1,
+            top: `${Math.min(comet.y + 20, 80)}%`,
+            transform: 'translate(-50%, -50%)',
           }}
-          onClick={() => handleCatchComet(comet.id)}
         >
-          <div className="comet-inner">
-            <span className="comet-emoji">☄️</span>
-            <span className="comet-value">+{fmt(comet.value)}</span>
+          <div className="text-2xl">☄️</div>
+          <div className="text-[10px] text-yellow-400 text-center whitespace-nowrap">
+            +{fmtKg(comet.value)}
           </div>
-          <div className="comet-timer" style={{ width: `${(comet.timeLeft / 8) * 100}%` }} />
-        </button>
+          <div className="text-[8px] text-gray-500 text-center">{Math.ceil(comet.timeLeft)}s</div>
+        </div>
       ))}
 
-      {/* Toast notifications */}
-      <div className="fixed top-2 right-3 sm:top-4 sm:right-4 z-50 space-y-2 max-w-[90vw]">
-        {toasts.map(t => (
-          <SwipeableNotification key={t.id} notification={t} onDismiss={dismissToast} />
-        ))}
-      </div>
-
-      {/* Offline gains modal */}
-      {offlineGains && (
-        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 px-4">
-          <div className="card max-w-sm w-full text-center mx-4" style={{borderColor: 'var(--color-neon)', borderWidth: '2px'}}>
-            <h2 className="glow-cyan text-lg mb-2">Welcome Back!</h2>
-            <div className="text-sm text-gray-400 mb-2">You were away for {fmtTime(offlineGains.time)}</div>
-            <div className="text-xl glow-cyan font-bold mb-1">+{fmt(offlineGains.mass)} mass</div>
-            <button className="btn-primary mt-4 w-full" onClick={() => setOfflineGains(null)}>Continue</button>
+      {/* Achievement popup */}
+      {achievementPopups.length > 0 && (
+        <div
+          onClick={() => setAchievementPopups(prev => prev.slice(1))}
+          className="absolute top-16 left-1/2 -translate-x-1/2 z-50 bg-gray-800 border border-yellow-500 rounded-lg p-3 shadow-lg shadow-yellow-500/20 animate-bounce-in cursor-pointer max-w-[280px]"
+        >
+          <div className="text-center">
+            <div className="text-2xl mb-1">{achievementPopups[0].emoji}</div>
+            <div className="text-yellow-400 text-xs font-bold">Achievement Unlocked!</div>
+            <div className="text-white text-sm font-bold">{achievementPopups[0].name}</div>
+            <div className="text-gray-400 text-[10px]">{achievementPopups[0].desc}</div>
+            <div className="text-green-400 text-[10px] mt-1">{achievementPopups[0].bonusDesc}</div>
+            <div className="text-gray-600 text-[8px] mt-2">tap to dismiss</div>
           </div>
         </div>
       )}
 
-      {/* Composition Info Modal */}
-      {showCompInfo && state.composition && (() => {
-        const comp = COMPOSITIONS.find(c => c.id === state.composition)!;
-        return (
-          <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 px-4" onClick={() => setShowCompInfo(false)}>
-            <div className="card max-w-sm w-full mx-4" style={{borderColor: 'var(--color-purple)', borderWidth: '2px'}} onClick={(e) => e.stopPropagation()}>
-              <div className="text-center mb-3">
-                <div className="text-3xl mb-1">{comp.emoji}</div>
-                <h2 className="glow-purple text-lg font-bold">{comp.name}</h2>
-                <div className="text-sm text-gray-400 italic">{comp.flavor}</div>
-              </div>
-              <div className="text-sm text-gray-300 mb-3 px-1">{comp.desc}</div>
-              <div className="glow-divider" />
-              <div className="text-xs text-gray-400 uppercase tracking-wider mb-2 mt-2">Stat Multipliers</div>
-              <div className="grid grid-cols-2 gap-x-4 gap-y-1.5 mb-3">
-                <div className="stat-row"><span className="text-xs text-gray-400">Mass Prod</span><span className={`text-sm font-bold ${comp.massProductionMult >= 1 ? 'text-green' : 'text-red'}`}>{comp.massProductionMult}x</span></div>
-                <div className="stat-row"><span className="text-xs text-gray-400">Cost</span><span className={`text-sm font-bold ${comp.costMult <= 1 ? 'text-green' : 'text-red'}`}>{comp.costMult}x</span></div>
-                <div className="stat-row"><span className="text-xs text-gray-400">Gravity</span><span className={`text-sm font-bold ${comp.gravityMult >= 1 ? 'text-green' : 'text-red'}`}>{comp.gravityMult}x</span></div>
-                <div className="stat-row"><span className="text-xs text-gray-400">Density</span><span className={`text-sm font-bold ${comp.densityMult >= 1 ? 'text-green' : 'text-red'}`}>{comp.densityMult}x</span></div>
-                <div className="stat-row"><span className="text-xs text-gray-400">Synergy</span><span className={`text-sm font-bold ${comp.synergyMult >= 1 ? 'text-green' : 'text-red'}`}>{comp.synergyMult}x</span></div>
-                <div className="stat-row"><span className="text-xs text-gray-400">Click</span><span className={`text-sm font-bold ${comp.clickMult >= 1 ? 'text-green' : 'text-red'}`}>{comp.clickMult}x</span></div>
-              </div>
-              <div className="glow-divider" />
-              <div className="mt-2 px-1">
-                <div className="text-sm font-bold text-purple mb-1">✦ {comp.specialName}</div>
-                <div className="text-sm text-gray-300">{comp.specialDesc}</div>
-              </div>
-              <button className="btn-secondary mt-4 w-full" onClick={() => setShowCompInfo(false)}>Got it</button>
-            </div>
-          </div>
-        );
-      })()}
-
-      {/* Impact Warning Modal */}
+      {/* Impact warning modal */}
       {showImpactWarning && (
-        <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 px-4" onClick={() => setShowImpactWarning(false)}>
-          <div className="card max-w-sm w-full mx-4" style={{borderColor: '#ff4444', borderWidth: '2px'}} onClick={(e) => e.stopPropagation()}>
+        <div className="absolute inset-0 bg-black/80 z-50 flex items-center justify-center p-4">
+          <div className="bg-gray-900 border border-red-500 rounded-lg p-4 max-w-sm w-full">
             <div className="text-center mb-3">
-              <div className="text-4xl mb-2">💥</div>
-              <h2 className="text-xl font-bold text-red-400">Initiate Impact?</h2>
+              <div className="text-3xl mb-2">💥</div>
+              <div className="text-red-400 font-bold text-lg">Impact Warning!</div>
             </div>
-            <div className="text-sm text-gray-300 mb-3 px-1">
-              Your asteroid will collide and reform. This will <span className="text-red-400 font-bold">reset</span> the following:
+            <div className="mb-3">
+              <div className="text-red-300 text-xs font-bold mb-1">Will be RESET:</div>
+              <div className="text-gray-400 text-xs">Mass, Density, Velocity, Energy, All buildings, Energy upgrades, Composition</div>
             </div>
-            <div className="bg-space-lighter rounded-lg p-3 mb-3 space-y-1.5">
-              <div className="flex items-center gap-2 text-sm"><span className="text-red-400">✕</span> <span className="text-gray-300">Mass, Gravity, Density</span></div>
-              <div className="flex items-center gap-2 text-sm"><span className="text-red-400">✕</span> <span className="text-gray-300">All Processes (buildings)</span></div>
-              <div className="flex items-center gap-2 text-sm"><span className="text-red-400">✕</span> <span className="text-gray-300">Orbital Mechanics</span></div>
-              <div className="flex items-center gap-2 text-sm"><span className="text-red-400">✕</span> <span className="text-gray-300">Energy (resets to base)</span></div>
-              <div className="flex items-center gap-2 text-sm"><span className="text-red-400">✕</span> <span className="text-gray-300">Composition choice</span></div>
+            <div className="mb-4">
+              <div className="text-green-300 text-xs font-bold mb-1">Will be KEPT:</div>
+              <div className="text-gray-400 text-xs">Shards (+{fmt(pendingShards)} new), Tab unlocks, Shard upgrades, Achievements, Tier progress</div>
             </div>
-            <div className="text-sm text-gray-300 mb-3 px-1">
-              These will be <span className="text-green font-bold">kept</span>:
-            </div>
-            <div className="bg-space-lighter rounded-lg p-3 mb-4 space-y-1.5">
-              <div className="flex items-center gap-2 text-sm"><span className="text-green">✓</span> <span className="text-gray-300">Core Upgrades (shard purchases)</span></div>
-              <div className="flex items-center gap-2 text-sm"><span className="text-green">✓</span> <span className="text-gray-300">Discoveries & Achievements</span></div>
-              <div className="flex items-center gap-2 text-sm"><span className="text-green">✓</span> <span className="text-gray-300">Forge Bonuses</span></div>
-              <div className="flex items-center gap-2 text-sm"><span className="text-green">✓</span> <span className="text-gray-300">Shards (you gain +{fmt(shardsOnPrestige)} new)</span></div>
-            </div>
-            <div className="flex gap-3">
-              <button className="btn-secondary flex-1" onClick={() => setShowImpactWarning(false)}>Cancel</button>
-              <button className="btn-primary flex-1 bg-red-600 hover:bg-red-500 border-red-500" onClick={handlePrestige}>
-                💥 Impact!
+            <div className="flex gap-2">
+              <button
+                onClick={() => setShowImpactWarning(false)}
+                className="flex-1 py-2 bg-gray-700 text-white rounded text-sm"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={confirmImpact}
+                className="flex-1 py-2 bg-red-600 hover:bg-red-500 text-white rounded text-sm font-bold"
+              >
+                💥 IMPACT!
               </button>
             </div>
           </div>
         </div>
       )}
 
-      {/* Impact Explosion Animation Overlay */}
+      {/* Impact explosion animation */}
       {impactExploding && (
-        <div className="impact-explosion-overlay">
-          <div className="impact-flash" />
-          <div className="impact-ring impact-ring-1" />
-          <div className="impact-ring impact-ring-2" />
-          <div className="impact-ring impact-ring-3" />
-          {Array.from({length: 20}).map((_, i) => (
+        <div className="absolute inset-0 z-[60] pointer-events-none">
+          <div className="absolute inset-0 bg-white animate-impact-flash" />
+          <div className="absolute inset-0 flex items-center justify-center">
+            <div className="w-20 h-20 border-4 border-orange-500 rounded-full animate-impact-ring" />
+          </div>
+          <div className="absolute inset-0 flex items-center justify-center">
+            <div className="w-40 h-40 border-2 border-red-400 rounded-full animate-impact-ring" style={{ animationDelay: '0.2s' }} />
+          </div>
+          {[...Array(8)].map((_, i) => (
             <div
               key={i}
-              className="impact-debris"
+              className="absolute w-2 h-2 bg-orange-400 rounded-full animate-impact-debris"
               style={{
-                '--debris-angle': `${(i / 20) * 360}deg`,
-                '--debris-distance': `${40 + Math.random() * 30}vw`,
-                '--debris-size': `${4 + Math.random() * 8}px`,
-                '--debris-delay': `${Math.random() * 0.3}s`,
+                left: '50%',
+                top: '50%',
+                '--angle': `${i * 45}deg`,
               } as React.CSSProperties}
             />
           ))}
-          <div className="impact-text">💥 IMPACT 💥</div>
+          <div className="absolute inset-0 flex items-center justify-center">
+            <div className="text-white text-3xl font-black animate-impact-text">IMPACT!</div>
+          </div>
         </div>
       )}
 
-      {/* Floating Feedback Button */}
-      <FeedbackButton onClick={() => setShowFeedback(true)} />
-
-      {/* Feedback Modal */}
-      {showFeedback && (
-        <FeedbackForm
-          state={state}
-          onClose={() => setShowFeedback(false)}
-          onSubmit={(success) => {
-            if (success) {
-              addToast('Feedback sent! Thanks!', '💬');
-              setShowFeedback(false);
-            } else {
-              addToast('Failed to send feedback', '❌');
-            }
-          }}
-        />
+      {/* Composition picker modal */}
+      {showCompPicker && (
+        <div className="absolute inset-0 bg-black/80 z-50 flex items-center justify-center p-4">
+          <div className="bg-gray-900 border border-gray-700 rounded-lg p-4 max-w-sm w-full">
+            <div className="text-white font-bold text-lg mb-1 text-center">Choose Composition</div>
+            <div className="text-gray-400 text-xs mb-3 text-center">This affects production for this run.</div>
+            {getUnlockedCompositions(state.currentTier).map(comp => (
+              <button
+                key={comp.id}
+                onClick={() => handleCompSelect(comp.id)}
+                className="w-full bg-gray-800 hover:bg-gray-700 rounded-lg p-3 mb-2 text-left transition-colors"
+              >
+                <div className="flex items-center gap-2">
+                  <span className="text-xl">{comp.emoji}</span>
+                  <span className="text-white font-medium">{comp.name}</span>
+                </div>
+                <p className="text-gray-400 text-xs mt-1">{comp.desc}</p>
+                <div className="text-xs mt-1 flex flex-wrap gap-2">
+                  {comp.massMult !== 1 && <span className={comp.massMult > 1 ? 'text-green-400' : 'text-red-400'}>Mass {fmtPercent(comp.massMult)}</span>}
+                  {comp.densityMult !== 1 && <span className={comp.densityMult > 1 ? 'text-green-400' : 'text-red-400'}>Density {fmtPercent(comp.densityMult)}</span>}
+                  {comp.velocityMult !== 1 && <span className={comp.velocityMult > 1 ? 'text-green-400' : 'text-red-400'}>Velocity {fmtPercent(comp.velocityMult)}</span>}
+                  {comp.cometMult !== 1 && <span className={comp.cometMult > 1 ? 'text-green-400' : 'text-red-400'}>Comet {fmtPercent(comp.cometMult)}</span>}
+                </div>
+              </button>
+            ))}
+            <button
+              onClick={() => setShowCompPicker(false)}
+              className="w-full py-2 text-gray-500 text-xs mt-1"
+            >
+              Skip (no bonus)
+            </button>
+          </div>
+        </div>
       )}
 
-      {/* Ad Modal */}
-      {pendingBoost && (
-        <AdModal boostType={pendingBoost} onComplete={handleAdComplete} onCancel={handleAdCancel} />
+      {/* Offline gains modal */}
+      {offlineGains && (
+        <div className="absolute inset-0 bg-black/80 z-50 flex items-center justify-center p-4">
+          <div className="bg-gray-900 border border-gray-700 rounded-lg p-4 max-w-sm w-full text-center">
+            <div className="text-2xl mb-2">🌙</div>
+            <div className="text-white font-bold mb-1">Welcome Back!</div>
+            <div className="text-gray-400 text-xs mb-2">You were away for {fmtTime(offlineGains.time)}</div>
+            <div className="text-green-400 text-sm font-bold">+{fmtKg(offlineGains.mass)} mass earned</div>
+            <button
+              onClick={() => setOfflineGains(null)}
+              className="mt-3 px-6 py-2 bg-blue-600 text-white rounded text-sm"
+            >
+              Nice!
+            </button>
+          </div>
+        </div>
       )}
 
-      {/* Tutorial walkthrough overlay */}
-      {tutorialStep >= 0 && (
-        <TutorialOverlay
-          currentStep={tutorialStep}
-          onNext={handleTutorialNext}
-          onSkip={handleTutorialSkip}
-        />
+      {/* Import/Export modal */}
+      {showImportExport && (
+        <div className="absolute inset-0 bg-black/80 z-50 flex items-center justify-center p-4">
+          <div className="bg-gray-900 border border-gray-700 rounded-lg p-4 max-w-sm w-full">
+            <div className="text-white font-bold mb-3">Import / Export Save</div>
+            <button
+              onClick={handleExport}
+              className="w-full py-2 bg-blue-700 text-white text-xs rounded mb-2"
+            >
+              📋 Copy Save to Clipboard
+            </button>
+            <textarea
+              value={importCode}
+              onChange={e => setImportCode(e.target.value)}
+              placeholder="Paste save code here..."
+              className="w-full bg-gray-800 text-white text-xs p-2 rounded mb-2 h-20"
+            />
+            <button
+              onClick={handleImport}
+              disabled={!importCode.trim()}
+              className="w-full py-2 bg-green-700 text-white text-xs rounded mb-2"
+            >
+              📥 Import Save
+            </button>
+            <button
+              onClick={() => { setShowImportExport(false); setImportCode(''); }}
+              className="w-full py-2 bg-gray-700 text-gray-300 text-xs rounded"
+            >
+              Close
+            </button>
+          </div>
+        </div>
       )}
 
-      {/* Contextual hint */}
-      {contextualHint && tutorialStep < 0 && (
-        <ContextualHint step={contextualHint} onDismiss={handleDismissHint} />
+      {/* Hard reset confirm */}
+      {showResetConfirm && (
+        <div className="absolute inset-0 bg-black/80 z-50 flex items-center justify-center p-4">
+          <div className="bg-gray-900 border border-red-500 rounded-lg p-4 max-w-sm w-full text-center">
+            <div className="text-3xl mb-2">⚠️</div>
+            <div className="text-red-400 font-bold text-lg mb-2">Hard Reset</div>
+            <div className="text-gray-400 text-xs mb-4">This will DELETE ALL progress permanently. Are you sure?</div>
+            <div className="flex gap-2">
+              <button
+                onClick={() => setShowResetConfirm(false)}
+                className="flex-1 py-2 bg-gray-700 text-white rounded text-sm"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleHardReset}
+                className="flex-1 py-2 bg-red-600 text-white rounded text-sm font-bold"
+              >
+                DELETE ALL
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

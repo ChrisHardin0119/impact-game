@@ -1,21 +1,22 @@
 'use client';
 
 import { useEffect, useRef, useCallback } from 'react';
-import { GameState } from '@/lib/types';
+import { GameState, AchievementPopup } from '@/lib/types';
 import { processTick } from '@/lib/gameEngine';
 import { saveGame } from '@/lib/saveLoad';
-import { checkDiscoveries } from '@/lib/discoveries';
+import { checkAchievements } from '@/lib/achievements';
 
 const AUTO_SAVE_INTERVAL = 30; // seconds
-const DISCOVERY_CHECK_INTERVAL = 2; // seconds (check achievements frequently)
+const ACHIEVEMENT_CHECK_INTERVAL = 2; // seconds
 
 export function useGameLoop(
   stateRef: React.MutableRefObject<GameState>,
   setState: (s: GameState) => void,
+  onNewAchievements?: (popups: AchievementPopup[]) => void,
 ) {
   const lastTimeRef = useRef<number>(0);
   const autoSaveTimerRef = useRef<number>(0);
-  const discoveryTimerRef = useRef<number>(0);
+  const achievementTimerRef = useRef<number>(0);
   const rafRef = useRef<number>(0);
 
   const tick = useCallback((timestamp: number) => {
@@ -29,16 +30,29 @@ export function useGameLoop(
     if (dt > 0) {
       let newState = processTick(stateRef.current, dt);
 
-      // Check discoveries every 2 seconds (lightweight check)
-      discoveryTimerRef.current += dt;
-      if (discoveryTimerRef.current >= DISCOVERY_CHECK_INTERVAL) {
-        discoveryTimerRef.current = 0;
-        const newDiscoveries = checkDiscoveries(newState);
-        if (newDiscoveries.length > 0) {
+      // Check achievements every 2 seconds
+      achievementTimerRef.current += dt;
+      if (achievementTimerRef.current >= ACHIEVEMENT_CHECK_INTERVAL) {
+        achievementTimerRef.current = 0;
+        const newAchievements = checkAchievements(newState);
+        if (newAchievements.length > 0) {
           newState = {
             ...newState,
-            discoveries: [...newState.discoveries, ...newDiscoveries],
+            achievements: [
+              ...newState.achievements,
+              ...newAchievements.map(a => a.id),
+            ],
           };
+          // Notify UI for popup display
+          if (onNewAchievements) {
+            onNewAchievements(newAchievements.map(a => ({
+              id: a.id,
+              name: a.name,
+              emoji: a.emoji,
+              desc: a.desc,
+              bonusDesc: a.bonusDesc,
+            })));
+          }
         }
       }
 
@@ -54,7 +68,7 @@ export function useGameLoop(
     }
 
     rafRef.current = requestAnimationFrame(tick);
-  }, [stateRef, setState]);
+  }, [stateRef, setState, onNewAchievements]);
 
   useEffect(() => {
     rafRef.current = requestAnimationFrame(tick);
