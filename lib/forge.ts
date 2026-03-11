@@ -15,14 +15,15 @@ export interface ForgeDef {
 
 export const FORGE_RECIPES: ForgeDef[] = [
   // ===== GRAVITY FORGES — spend gravity for mass/production bonuses =====
+  // Costs are high (100-280) so spending them actually drops your gravity multiplier
   {
     id: 'mass_catalyst',
     name: 'Mass Catalyst',
     emoji: '⚗️',
-    desc: 'Forge gravity into a permanent mass production bonus.',
+    desc: 'Forge gravity into a permanent mass production bonus. Costs most of your gravity!',
     resource: 'gravity',
-    baseCost: 50,
-    costScale: 1.4,
+    baseCost: 100,
+    costScale: 1.15,
     maxLevel: 10,
     effect: '+10% mass production per level',
     unlockTier: 0,
@@ -33,8 +34,8 @@ export const FORGE_RECIPES: ForgeDef[] = [
     emoji: '👆',
     desc: 'Forge gravity into permanent click power.',
     resource: 'gravity',
-    baseCost: 80,
-    costScale: 1.5,
+    baseCost: 150,
+    costScale: 1.15,
     maxLevel: 5,
     effect: '+20% click value per level',
     unlockTier: 0,
@@ -45,22 +46,23 @@ export const FORGE_RECIPES: ForgeDef[] = [
     emoji: '🔌',
     desc: 'Forge gravity into permanent energy regen.',
     resource: 'gravity',
-    baseCost: 100,
-    costScale: 1.6,
+    baseCost: 180,
+    costScale: 1.12,
     maxLevel: 5,
     effect: '+0.5 energy regen per level',
     unlockTier: 1,
   },
 
-  // ===== DENSITY FORGES — spend density for shard/prestige bonuses =====
+  // ===== DENSITY FORGES — spend density for shard/impact bonuses =====
+  // Costs are meaningful % of your density (30-90%), dropping your multiplier
   {
     id: 'shard_refiner',
     name: 'Shard Refiner',
     emoji: '💎',
-    desc: 'Forge density into a permanent shard bonus on prestige.',
+    desc: 'Forge density into a permanent shard bonus on impact.',
     resource: 'density',
-    baseCost: 20,
-    costScale: 1.3,
+    baseCost: 30,
+    costScale: 1.12,
     maxLevel: 10,
     effect: '+8% shard generation per level',
     unlockTier: 0,
@@ -71,8 +73,8 @@ export const FORGE_RECIPES: ForgeDef[] = [
     emoji: '⚓',
     desc: 'Forge density to permanently reduce gravity decay from orbital mechanics.',
     resource: 'density',
-    baseCost: 30,
-    costScale: 1.4,
+    baseCost: 40,
+    costScale: 1.15,
     maxLevel: 5,
     effect: 'Gravity decays 10% slower per level',
     unlockTier: 0,
@@ -83,8 +85,8 @@ export const FORGE_RECIPES: ForgeDef[] = [
     emoji: '♻️',
     desc: 'Forge density to permanently reduce density decay rate.',
     resource: 'density',
-    baseCost: 40,
-    costScale: 1.5,
+    baseCost: 50,
+    costScale: 1.15,
     maxLevel: 5,
     effect: 'Density decays 15% slower per level',
     unlockTier: 1,
@@ -95,7 +97,10 @@ export const FORGE_RECIPES: ForgeDef[] = [
  * Get the cost of the next forge level.
  */
 export function getForgeCost(def: ForgeDef, currentLevel: number): number {
-  return Math.floor(def.baseCost * Math.pow(def.costScale, currentLevel));
+  const raw = Math.floor(def.baseCost * Math.pow(def.costScale, currentLevel));
+  // Cap costs so they never exceed the resource cap (280 gravity, 95 density)
+  const cap = def.resource === 'gravity' ? 280 : 95;
+  return Math.min(raw, cap);
 }
 
 /**

@@ -29,7 +29,8 @@ export function getGravityZone(gravity: number): { label: string; color: string 
   if (gravity < 50) return { label: 'Low', color: '#ff8800' };
   if (gravity <= 100) return { label: 'Stable', color: '#88cc44' };
   if (gravity <= 200) return { label: 'Strong', color: '#44ddff' };
-  return { label: 'Massive', color: '#cc44ff' };
+  if (gravity <= 250) return { label: 'Massive', color: '#cc44ff' };
+  return { label: 'OVERLOAD', color: '#ff4444' };
 }
 
 /**
@@ -55,7 +56,32 @@ export function getDensityZone(density: number): { label: string; color: string 
   if (density <= 10) return { label: 'Dispersed', color: '#ff4444' };
   if (density < 50) return { label: 'Thin', color: '#ff8800' };
   if (density < 75) return { label: 'Dense', color: '#88cc44' };
-  return { label: 'Ultra-Dense', color: '#cc44ff' };
+  if (density <= 85) return { label: 'Ultra-Dense', color: '#cc44ff' };
+  return { label: 'OVERHEAT', color: '#ff4444' };
+}
+
+/**
+ * Gravity Overload penalty.
+ * At 250+ gravity, mass production is reduced (gravitational collapse).
+ * 250 = -10%, scales linearly to -30% at 300.
+ * Returns a multiplier (1.0 = no penalty, 0.7 = 30% penalty).
+ */
+export function getGravityOverloadMult(gravity: number): number {
+  if (gravity <= 250) return 1.0;
+  const excess = Math.min(gravity - 250, 50); // 0-50 range
+  const penaltyPercent = (excess / 50) * 0.30; // 0% to 30%
+  return 1.0 - penaltyPercent;
+}
+
+/**
+ * Density Overheat — extra energy drain at 85%+ density.
+ * Returns additional energy drain per second.
+ * 85% = +2/sec, scales to +5/sec at 100%.
+ */
+export function getDensityOverheatDrain(density: number): number {
+  if (density <= 85) return 0;
+  const excess = Math.min(density - 85, 15); // 0-15 range
+  return 2.0 + (excess / 15) * 3.0; // 2 to 5 extra drain
 }
 
 /**

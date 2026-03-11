@@ -67,7 +67,7 @@ export const ORBITAL_MECHANICS: OrbitalMechanicDef[] = [
     id: 'gravity_brake',
     name: 'Gravity Brake',
     emoji: '🛑',
-    desc: 'Lowers gravity by 0.15/sec. Use when gravity is too high.',
+    desc: 'Lowers gravity by 0.15/sec. Avoid OVERLOAD (250+) which cuts mass production!',
     isToggle: true,
     energyCost: 12,
     energyDrain: 1.0,    // was 1.5
@@ -79,7 +79,7 @@ export const ORBITAL_MECHANICS: OrbitalMechanicDef[] = [
     id: 'density_vent',
     name: 'Density Vent',
     emoji: '💨',
-    desc: 'Lowers density by 0.005/sec. Shed excess density fast.',
+    desc: 'Lowers density by 0.005/sec. Avoid OVERHEAT (85%+) which drains energy!',
     isToggle: true,
     energyCost: 12,
     energyDrain: 0.8,    // was 1.2

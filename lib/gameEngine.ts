@@ -8,6 +8,8 @@ import {
   getDensityDecay,
   getEnergyRegen,
   getMaxEnergy,
+  getGravityOverloadMult,
+  getDensityOverheatDrain,
 } from './resources';
 import { calcShards } from './prestige';
 import { hasProcessMilestone } from './discoveries';
@@ -218,6 +220,9 @@ export function getTotalProduction(
   const forgeEffects = getForgeEffects(state);
   totalMass *= forgeEffects.massMult;
 
+  // Apply gravity overload penalty (250+ gravity reduces mass production)
+  totalMass *= getGravityOverloadMult(state.gravity);
+
   return {
     mass: totalMass,
     gravity: totalGravity,
@@ -332,6 +337,8 @@ export function processTick(state: GameState, dt: number): GameState {
   if (newState.discoveries.includes('toggle_maniac')) {
     totalDrain *= 0.9;
   }
+  // Density overheat: 85%+ density causes extra energy drain
+  totalDrain += getDensityOverheatDrain(newState.density);
   const netEnergy = energyRegen - totalDrain;
   newState.energy += netEnergy * dt;
 

@@ -10,7 +10,7 @@ import { CORE_UPGRADES, canPurchaseUpgrade, getUpgradeCost } from '@/lib/upgrade
 import { COMPOSITIONS, getUnlockedCompositions } from '@/lib/compositions';
 import { calcShards, canPrestige, getPrestigeResetState, PRESTIGE_TIERS } from '@/lib/prestige';
 import { DISCOVERIES, checkDiscoveries, checkPrestigeDiscoveries } from '@/lib/discoveries';
-import { getGravityMultiplier, getDensityMultiplier, getGravityZone, getDensityZone, getEnergyRegen, getMaxEnergy } from '@/lib/resources';
+import { getGravityMultiplier, getDensityMultiplier, getGravityZone, getDensityZone, getEnergyRegen, getMaxEnergy, getGravityOverloadMult, getDensityOverheatDrain } from '@/lib/resources';
 import { fmt, fmtPct, fmtTime } from '@/lib/format';
 import { saveGame, loadGame, calculateOfflineGains, hardReset, exportSave, importSave } from '@/lib/saveLoad';
 import { useGameLoop } from '@/hooks/useGameLoop';
@@ -502,7 +502,7 @@ export default function GamePage() {
           <div className="flex gap-2 shrink-0 items-center">
             <button className="btn-secondary text-sm px-2.5 py-1" onClick={() => saveGame(state)}>Save</button>
             <button className="btn-secondary text-sm px-2.5 py-1" onClick={() => setTab('stats')}>⚙</button>
-            <span className="text-xs text-gray-600">v12.6</span>
+            <span className="text-xs text-gray-600">v12.7</span>
           </div>
         </div>
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-x-4 gap-y-2 sm:gap-3">
@@ -521,6 +521,7 @@ export default function GamePage() {
             <div className="flex items-center gap-1.5 mt-0.5">
               <span className="text-xs font-bold" style={{color: gravZone.color}}>{gravZone.label}</span>
               <span className="badge" style={{background: gravMult >= 1 ? 'rgba(0,255,136,0.15)' : 'rgba(255,51,102,0.15)', color: gravMult >= 1 ? 'var(--color-green)' : 'var(--color-red)', border: 'none', fontSize: '0.65rem'}}>{gravMult.toFixed(2)}x</span>
+              {state.gravity > 250 && <span className="text-xs text-red font-bold animate-pulse">-{Math.round((1 - getGravityOverloadMult(state.gravity)) * 100)}% mass!</span>}
             </div>
           </div>
           {/* Density */}
@@ -532,6 +533,7 @@ export default function GamePage() {
             <div className="flex items-center gap-1.5 mt-0.5">
               <span className="text-xs font-bold" style={{color: densZone.color}}>{densZone.label}</span>
               <span className="badge" style={{background: densMult >= 1 ? 'rgba(180,74,255,0.15)' : 'rgba(255,51,102,0.15)', color: densMult >= 1 ? 'var(--color-purple)' : 'var(--color-red)', border: 'none', fontSize: '0.65rem'}}>{densMult.toFixed(2)}x</span>
+              {state.density > 85 && <span className="text-xs text-red font-bold animate-pulse">-{getDensityOverheatDrain(state.density).toFixed(1)} nrg!</span>}
             </div>
           </div>
           {/* Energy */}
@@ -960,7 +962,7 @@ export default function GamePage() {
             <div className="section-header"><h2 className="glow-orange text-lg font-bold">Forge</h2></div>
             <div className="card mb-4">
               <div className="text-sm text-gray-300 px-1">
-                Spend <span className="text-cyan font-bold">gravity</span> and <span className="text-purple font-bold">density</span> to forge permanent bonuses. These persist through impact. Manage your resources wisely — use Gravity Brake and Density Vent to control levels after forging.
+                Spend <span className="text-cyan font-bold">gravity</span> and <span className="text-purple font-bold">density</span> to forge permanent bonuses that persist through impact. Forging costs a LOT — you&#39;ll need to rebuild after each purchase. Watch out: gravity above 250 causes <span className="text-red font-bold">OVERLOAD</span> (mass penalty) and density above 85% causes <span className="text-red font-bold">OVERHEAT</span> (energy drain). Use Gravity Brake and Density Vent to stay in the safe zone!
               </div>
             </div>
 
