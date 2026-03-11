@@ -130,6 +130,17 @@ export const CORE_UPGRADES: CoreUpgradeDef[] = [
 
   // ==================== COMET PATH ====================
   {
+    id: 'comet_power',
+    name: 'Comet Power',
+    emoji: '💥',
+    desc: 'Increase comet value by +0.1% of mass per level. Base is 2%, max 5% at level 30.',
+    path: 'foundation',
+    cost: 5,
+    maxLevel: 30,
+    requires: [],
+    unlockTier: 0,
+  },
+  {
     id: 'comet_magnet',
     name: 'Comet Magnet',
     emoji: '☄️',
@@ -260,6 +271,8 @@ export function getUpgradeEffect(id: string, level: number): number {
       return 0.5; // reduce decay by 50%
     case 'density_overclock':
       return 0.25; // 25% of density as mass mult
+    case 'comet_power':
+      return 0.02 + level * 0.001; // base 2% + 0.1% per level
     case 'comet_magnet':
       return level * 0.2; // 20% per level
     case 'comet_offline':

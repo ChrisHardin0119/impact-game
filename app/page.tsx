@@ -3,7 +3,7 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
 import { GameState, TabName, BuyMode, FloatingNumber } from '@/lib/types';
 import { defaultGameState } from '@/lib/prestige';
-import { processClick, buyProcess, activateOrbitalMechanic, getMassPerSecond, getClickValue, catchComet } from '@/lib/gameEngine';
+import { processClick, buyProcess, activateOrbitalMechanic, getMassPerSecond, getClickValue, catchComet, activateElementalCharge } from '@/lib/gameEngine';
 import { getProcessCost, getMaxAffordable, PROCESSES } from '@/lib/processes';
 import { ORBITAL_MECHANICS, getUnlockedOM, getTotalEnergyDrain } from '@/lib/orbitalMechanics';
 import { CORE_UPGRADES, canPurchaseUpgrade, getUpgradeCost } from '@/lib/upgrades';
@@ -23,6 +23,7 @@ import { BoostType, applyBoost } from '@/lib/boosts';
 import FeedbackButton from '@/components/FeedbackButton';
 import FeedbackForm from '@/components/FeedbackForm';
 import { initAdMob } from '@/lib/adMobBridge';
+import { FORGE_RECIPES, getUnlockedForges, getForgeCost, canForge, purchaseForge, getForgeEffects } from '@/lib/forge';
 
 export default function GamePage() {
   const [state, setStateRaw] = useState<GameState>(defaultGameState());
@@ -380,7 +381,8 @@ export default function GamePage() {
     if (updatedState.boosts.prestigeDouble.active && !updatedState.boosts.prestigeDouble.usedThisRun) {
       shardMult = 2;
     }
-    const shardsEarned = calcShards(updatedState.runMassEarned, updatedState.currentTier, shardMult, updatedState.discoveries);
+    const forgeShardMult = getForgeEffects(updatedState).shardMult;
+    const shardsEarned = calcShards(updatedState.runMassEarned, updatedState.currentTier, shardMult, updatedState.discoveries, forgeShardMult);
     let newState = getPrestigeResetState(updatedState);
     if (shardMult === 2) {
       newState.boosts = {
@@ -413,6 +415,25 @@ export default function GamePage() {
     }
   }, [setState, addToast]);
 
+  const handleForge = useCallback((forgeId: string) => {
+    const forgeDef = FORGE_RECIPES.find(f => f.id === forgeId);
+    if (!forgeDef) return;
+    const result = purchaseForge(forgeDef, stateRef.current);
+    if (result) {
+      setState(result);
+      addToast(`Forged ${forgeDef.name}!`, forgeDef.emoji);
+    }
+  }, [setState, addToast]);
+
+  const handleCharge = useCallback((processId: string) => {
+    const result = activateElementalCharge(stateRef.current, processId);
+    if (result) {
+      setState(result);
+      const pName = PROCESSES.find(p => p.id === processId)?.name || processId;
+      addToast(`Charged ${pName}! +50% for 8s`, '💎');
+    }
+  }, [setState, addToast]);
+
   const setTab = useCallback((tab: TabName) => {
     setState({ ...stateRef.current, activeTab: tab });
   }, [setState]);
@@ -426,9 +447,11 @@ export default function GamePage() {
   }
 
   const { activeTab } = state;
+  const hasAnyUpgrade = Object.values(state.coreUpgrades).some(v => v > 0);
   const tabs: { id: TabName; label: string; icon: string }[] = [
     { id: 'build', label: 'Build', icon: '🏗️' },
     { id: 'orbital', label: 'Orbital', icon: '🚀' },
+    ...(hasAnyUpgrade ? [{ id: 'forge' as TabName, label: 'Forge', icon: '🔥' }] : []),
     { id: 'upgrades', label: 'Upgrades', icon: '⬆️' },
     { id: 'prestige', label: 'Prestige', icon: '💎' },
     { id: 'discover', label: 'Discover', icon: '🔍' },
@@ -441,7 +464,7 @@ export default function GamePage() {
   const gravZone = getGravityZone(state.gravity);
   const densZone = getDensityZone(state.density);
   const massPerSec = getMassPerSecond(state);
-  const shardsOnPrestige = canPrestige(state) ? calcShards(state.runMassEarned, state.currentTier) : 0;
+  const shardsOnPrestige = canPrestige(state) ? calcShards(state.runMassEarned, state.currentTier, 1, state.discoveries, getForgeEffects(state).shardMult) : 0;
   const currentTierDef = PRESTIGE_TIERS[state.currentTier];
   const nextTierDef = state.currentTier < 5 ? PRESTIGE_TIERS[state.currentTier + 1] : null;
   const unlockedComps = getUnlockedCompositions(state.currentTier);
@@ -462,7 +485,7 @@ export default function GamePage() {
           <div className="flex gap-2 shrink-0 items-center">
             <button className="btn-secondary text-sm px-2.5 py-1" onClick={() => saveGame(state)}>Save</button>
             <button className="btn-secondary text-sm px-2.5 py-1" onClick={() => setTab('stats')}>⚙</button>
-            <span className="text-xs text-gray-600">v12.4</span>
+            <span className="text-xs text-gray-600">v12.5</span>
           </div>
         </div>
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-x-4 gap-y-2 sm:gap-3">
@@ -543,7 +566,7 @@ export default function GamePage() {
             <div className="flex justify-center mb-6 mt-1">
               <div className="relative cursor-pointer select-none" onClick={handleClick}>
                 <div className={`w-28 h-28 sm:w-32 sm:h-32 rounded-full bg-gradient-to-br from-gray-600 to-gray-800 border-2 flex items-center justify-center text-4xl hover:scale-105 transition-all active:scale-95 ${clickCombo >= 15 ? 'border-yellow' : clickCombo >= 8 ? 'border-orange' : clickCombo >= 3 ? 'border-neon' : 'border-gray-500'}`} style={{boxShadow: `0 0 ${Math.min(30, Math.log10(state.mass + 1) * 3) + clickCombo * 1.5}px ${clickCombo >= 15 ? 'var(--color-yellow)' : clickCombo >= 8 ? 'var(--color-orange)' : 'var(--color-neon)'}`}}>
-                  🪨
+                  {currentTierDef.emoji}
                 </div>
                 <div className="absolute -bottom-5 left-1/2 -translate-x-1/2 text-xs text-gray-400 whitespace-nowrap">
                   +{fmt(getClickValue(state, 1 + (Math.min(clickCombo, 20) / 20) * 4))}/click
@@ -583,14 +606,16 @@ export default function GamePage() {
                   (p.unlockCondition.type === 'gravity' && state.gravity >= p.unlockCondition.value);
                 if (!unlocked && owned === 0) return null;
 
+                const isCharged = state.chargedProcess === p.id && state.chargeCooldown > 0;
                 return (
-                  <div key={p.id} className={`card flex items-center justify-between ${buyInfo.canAfford ? 'hover:border-neon' : 'opacity-60'}`}>
+                  <div key={p.id} className={`card flex items-center justify-between ${isCharged ? 'border-purple shadow-[0_0_12px_rgba(180,74,255,0.3)]' : buyInfo.canAfford ? 'hover:border-neon' : 'opacity-60'}`}>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 flex-wrap">
                         <span className="text-lg">{p.emoji}</span>
                         <span className="font-bold text-base">{p.name}</span>
                         <span className="badge badge-cyan">x{owned}</span>
                         {p.compositionBonus === state.composition && <span className="badge badge-purple">★ bonus</span>}
+                        {isCharged && <span className="badge badge-yellow">⚡ {Math.ceil(state.chargeCooldown)}s</span>}
                       </div>
                       <div className="text-sm text-gray-400 mt-1">{p.desc}</div>
                       <div className="flex flex-wrap gap-2 mt-1.5">
@@ -599,9 +624,20 @@ export default function GamePage() {
                         {p.densityPS > 0 && <span className="badge badge-purple">+{fmtPct(p.densityPS)}/s dens</span>}
                       </div>
                     </div>
-                    <button className="btn-primary text-sm ml-3 shrink-0 min-w-[5.5rem] text-center" disabled={!buyInfo.canAfford} onClick={() => handleBuy(p.id)}>
-                      {buyInfo.label}
-                    </button>
+                    <div className="flex flex-col gap-1.5 ml-3 shrink-0">
+                      <button className="btn-primary text-xs min-w-[6rem] max-w-[8rem] text-center truncate" disabled={!buyInfo.canAfford} onClick={() => handleBuy(p.id)}>
+                        {buyInfo.label}
+                      </button>
+                      {state.composition === 'carbonaceous' && owned > 0 && (
+                        <button
+                          className="text-xs px-2 py-1 rounded-md min-w-[5.5rem] text-center transition-all bg-purple/20 text-purple border border-purple/40 hover:bg-purple/30 disabled:opacity-40 disabled:cursor-not-allowed"
+                          disabled={state.chargeCooldown > 0 || state.density < 5}
+                          onClick={() => handleCharge(p.id)}
+                        >
+                          ⚡ Charge
+                        </button>
+                      )}
+                    </div>
                   </div>
                 );
               })}
@@ -901,6 +937,93 @@ export default function GamePage() {
           </div>
         )}
 
+        {/* FORGE TAB */}
+        {activeTab === 'forge' && (
+          <div>
+            <div className="section-header"><h2 className="glow-orange text-lg font-bold">Forge</h2></div>
+            <div className="card mb-4">
+              <div className="text-sm text-gray-300 px-1">
+                Spend <span className="text-cyan font-bold">gravity</span> and <span className="text-purple font-bold">density</span> to forge permanent bonuses. These persist through prestige. Manage your resources wisely — use Gravity Brake and Density Vent to control levels after forging.
+              </div>
+            </div>
+
+            {/* Gravity Forges */}
+            <div className="section-header mt-4"><h3 className="text-sm font-bold text-cyan uppercase tracking-wider">Gravity Forges</h3></div>
+            <div className="text-xs text-gray-400 mb-2 px-1">Available: <span className="text-cyan font-bold">{fmt(state.gravity, 0)}</span> gravity</div>
+            <div className="space-y-2.5 mb-4">
+              {getUnlockedForges(state.currentTier).filter(f => f.resource === 'gravity').map(f => {
+                const level = state.forgeLevels[f.id] || 0;
+                const maxed = level >= f.maxLevel;
+                const cost = maxed ? 0 : getForgeCost(f, level);
+                const affordable = canForge(f, state);
+                return (
+                  <div key={f.id} className={`card flex items-center justify-between ${maxed ? 'border-yellow' : affordable ? 'hover:border-neon' : 'opacity-60'}`}>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="text-lg">{f.emoji}</span>
+                        <span className="font-bold text-base">{f.name}</span>
+                        <span className="badge badge-cyan">{level}/{f.maxLevel}</span>
+                      </div>
+                      <div className="text-sm text-gray-400 mt-1">{f.desc}</div>
+                      <div className="mt-1.5"><span className="badge badge-green">{f.effect}</span></div>
+                    </div>
+                    <button className="btn-primary text-sm ml-3 shrink-0 min-w-[5.5rem] text-center" disabled={!affordable || maxed} onClick={() => handleForge(f.id)}>
+                      {maxed ? 'MAX' : `${fmt(cost, 0)} grav`}
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Density Forges */}
+            <div className="section-header"><h3 className="text-sm font-bold text-purple uppercase tracking-wider">Density Forges</h3></div>
+            <div className="text-xs text-gray-400 mb-2 px-1">Available: <span className="text-purple font-bold">{state.density.toFixed(1)}%</span> density</div>
+            <div className="space-y-2.5 mb-4">
+              {getUnlockedForges(state.currentTier).filter(f => f.resource === 'density').map(f => {
+                const level = state.forgeLevels[f.id] || 0;
+                const maxed = level >= f.maxLevel;
+                const cost = maxed ? 0 : getForgeCost(f, level);
+                const affordable = canForge(f, state);
+                return (
+                  <div key={f.id} className={`card flex items-center justify-between ${maxed ? 'border-yellow' : affordable ? 'hover:border-neon' : 'opacity-60'}`}>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="text-lg">{f.emoji}</span>
+                        <span className="font-bold text-base">{f.name}</span>
+                        <span className="badge badge-purple">{level}/{f.maxLevel}</span>
+                      </div>
+                      <div className="text-sm text-gray-400 mt-1">{f.desc}</div>
+                      <div className="mt-1.5"><span className="badge badge-green">{f.effect}</span></div>
+                    </div>
+                    <button className="btn-primary text-sm ml-3 shrink-0 min-w-[5.5rem] text-center" disabled={!affordable || maxed} onClick={() => handleForge(f.id)}>
+                      {maxed ? 'MAX' : `${cost}% dens`}
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Active Forge Bonuses summary */}
+            {Object.keys(state.forgeLevels).length > 0 && (
+              <div className="card">
+                <div className="section-header"><h3 className="text-sm font-bold text-yellow uppercase tracking-wider">Active Bonuses</h3></div>
+                {(() => {
+                  const eff = getForgeEffects(state);
+                  return (
+                    <div className="space-y-1">
+                      {eff.massMult > 1 && <div className="stat-row"><span className="text-xs text-gray-400">Mass Production</span><span className="text-sm font-bold text-green">+{Math.round((eff.massMult - 1) * 100)}%</span></div>}
+                      {eff.clickMult > 1 && <div className="stat-row"><span className="text-xs text-gray-400">Click Power</span><span className="text-sm font-bold text-green">+{Math.round((eff.clickMult - 1) * 100)}%</span></div>}
+                      {eff.energyRegen > 0 && <div className="stat-row"><span className="text-xs text-gray-400">Energy Regen</span><span className="text-sm font-bold text-green">+{eff.energyRegen.toFixed(1)}/s</span></div>}
+                      {eff.shardMult > 1 && <div className="stat-row"><span className="text-xs text-gray-400">Shard Generation</span><span className="text-sm font-bold text-green">+{Math.round((eff.shardMult - 1) * 100)}%</span></div>}
+                      {eff.densityDecayReduction < 1 && <div className="stat-row"><span className="text-xs text-gray-400">Density Decay</span><span className="text-sm font-bold text-green">-{Math.round((1 - eff.densityDecayReduction) * 100)}%</span></div>}
+                    </div>
+                  );
+                })()}
+              </div>
+            )}
+          </div>
+        )}
+
         {/* STATS TAB */}
         {activeTab === 'stats' && (
           <div>
@@ -963,7 +1086,7 @@ export default function GamePage() {
           onTouchStart={handleDragStart}
           onClick={handleMiniClick}
         >
-          <div className="mini-asteroid-inner pulse-glow">🪨</div>
+          <div className="mini-asteroid-inner pulse-glow">{currentTierDef.emoji}</div>
           <div className="mini-asteroid-mass">+{fmt(getClickValue(state, 1))}/tap</div>
         </div>
       )}
@@ -984,7 +1107,7 @@ export default function GamePage() {
             <span className="comet-emoji">☄️</span>
             <span className="comet-value">+{fmt(comet.value)}</span>
           </div>
-          <div className="comet-timer" style={{ width: `${(comet.timeLeft / 5) * 100}%` }} />
+          <div className="comet-timer" style={{ width: `${(comet.timeLeft / 8) * 100}%` }} />
         </button>
       ))}
 

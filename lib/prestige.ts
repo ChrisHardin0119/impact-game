@@ -11,7 +11,7 @@ export const PRESTIGE_TIERS: PrestigeTierDef[] = [
   {
     tier: 1,
     name: 'Asteroid',
-    emoji: '🪨',
+    emoji: '☄️',
     shardReq: 100,
     unlockDesc: 'Unlocks Silicate, Iron, Ice, and Carbonaceous compositions.',
   },
@@ -49,7 +49,7 @@ export const PRESTIGE_TIERS: PrestigeTierDef[] = [
  * Calculate shards earned from a prestige run
  * Formula: floor(sqrt(massEarned / 1e6)) * (1 + tier * 0.3) * shardBoostMultiplier
  */
-export function calcShards(massEarned: number, tier: PrestigeTier, shardBoostMultiplier: number = 1, discoveries: string[] = []): number {
+export function calcShards(massEarned: number, tier: PrestigeTier, shardBoostMultiplier: number = 1, discoveries: string[] = [], forgeMult: number = 1): number {
   const baseShards = Math.floor(Math.sqrt(massEarned / 1000000));
   const tierBonus = 1 + tier * 0.3;
 
@@ -59,7 +59,7 @@ export function calcShards(massEarned: number, tier: PrestigeTier, shardBoostMul
   if (discoveries.includes('prestige_veteran')) discoveryMult += 0.15;
   if (discoveries.includes('silent_giant')) discoveryMult += 0.10;
 
-  return Math.floor(baseShards * tierBonus * shardBoostMultiplier * discoveryMult);
+  return Math.floor(baseShards * tierBonus * shardBoostMultiplier * discoveryMult * forgeMult);
 }
 
 /**
@@ -151,6 +151,9 @@ export function getPrestigeResetState(state: GameState): GameState {
     // Charged building reset
     chargedProcess: null,
     chargeCooldown: 0,
+
+    // Forge persists through prestige
+    forgeLevels: { ...state.forgeLevels },
 
     // Tutorial persists
     tutorialCompleted: [...state.tutorialCompleted],
@@ -267,6 +270,9 @@ export function defaultGameState(): GameState {
     // Charged buildings
     chargedProcess: null,
     chargeCooldown: 0,
+
+    // Forge system
+    forgeLevels: {},
 
     // Tutorial
     tutorialCompleted: [],

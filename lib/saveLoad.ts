@@ -56,6 +56,7 @@ export function loadGame(): GameState | null {
       totalOrbitalToggles: parsed.totalOrbitalToggles ?? defaults.totalOrbitalToggles,
       maxComboReached: parsed.maxComboReached ?? defaults.maxComboReached,
       activeComets: parsed.activeComets || defaults.activeComets,
+      forgeLevels: parsed.forgeLevels || defaults.forgeLevels,
     };
     return migrated;
   } catch (e) {

@@ -1,5 +1,6 @@
 import { GameState, PrestigeTier } from './types';
 import { CORE_UPGRADES } from './upgrades';
+import { getForgeEffects } from './forge';
 
 /**
  * Calculates the gravity multiplier based on current gravity value.
@@ -100,6 +101,10 @@ export function getEnergyRegen(state: GameState): number {
   if (state.omToggles?.['energy_siphon']) {
     regen += 1.5;
   }
+
+  // Forge energy conduit bonus
+  const forgeEffects = getForgeEffects(state);
+  regen += forgeEffects.energyRegen;
 
   return regen;
 }

@@ -5,7 +5,7 @@
 export type CompositionId = 'silicate' | 'iron' | 'ice' | 'carbonaceous' | 'binary' | 'neutron';
 export type ProcessCategory = 'active' | 'passive' | 'resonant' | 'exotic';
 export type PrestigeTier = 0 | 1 | 2 | 3 | 4 | 5;
-export type TabName = 'build' | 'orbital' | 'upgrades' | 'prestige' | 'discover' | 'stats';
+export type TabName = 'build' | 'orbital' | 'upgrades' | 'prestige' | 'discover' | 'stats' | 'forge';
 export type BuyMode = 1 | 5 | 10 | 100 | 'max';
 export type UpgradePath = 'synergy' | 'density' | 'energy';
 
@@ -146,6 +146,9 @@ export interface GameState {
   // Charged buildings (for Carbonaceous composition)
   chargedProcess: string | null;
   chargeCooldown: number;
+
+  // Forge system — spend gravity/density for permanent bonuses
+  forgeLevels: Record<string, number>; // id -> level purchased
 
   // UI
   activeTab: TabName;

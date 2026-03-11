@@ -11,6 +11,7 @@ import {
 } from './resources';
 import { calcShards } from './prestige';
 import { hasProcessMilestone } from './discoveries';
+import { getForgeEffects } from './forge';
 
 /**
  * Calculates production for a single process.
@@ -173,6 +174,13 @@ export function getProcessProduction(
     massProduction *= 1.5;
   }
 
+  // Carbonaceous Elemental Charge: +50% to charged process
+  if (state.chargedProcess === processId && state.chargeCooldown > 0) {
+    massProduction *= 1.5;
+    gravityProduction *= 1.5;
+    densityProduction *= 1.5;
+  }
+
   return {
     mass: massProduction,
     gravity: gravityProduction,
@@ -205,6 +213,10 @@ export function getTotalProduction(
       totalDensity *= composition.densityMult;
     }
   }
+
+  // Apply forge mass catalyst bonus
+  const forgeEffects = getForgeEffects(state);
+  totalMass *= forgeEffects.massMult;
 
   return {
     mass: totalMass,
@@ -249,6 +261,10 @@ export function getClickValue(state: GameState, comboMultiplier: number = 1): nu
   if (state.discoveries.includes('click_addict')) {
     value *= 1.25;
   }
+
+  // Forge click amplifier bonus
+  const forgeEffects = getForgeEffects(state);
+  value *= forgeEffects.clickMult;
 
   return value;
 }
@@ -299,8 +315,9 @@ export function processTick(state: GameState, dt: number): GameState {
     newState.gravity -= 0.1 * dt; // tradeoff: lose gravity for energy regen
   }
 
-  // Apply density decay
-  const decayRate = getDensityDecay(newState.currentTier);
+  // Apply density decay (reduced by forge)
+  const forgeEff = getForgeEffects(newState);
+  const decayRate = getDensityDecay(newState.currentTier) * forgeEff.densityDecayReduction;
   newState.density -= decayRate * dt;
 
   // Clamp values to valid ranges
@@ -399,6 +416,10 @@ export function processTick(state: GameState, dt: number): GameState {
   // Handle charge cooldown for Carbonaceous
   if (newState.composition === 'carbonaceous' && newState.chargeCooldown > 0) {
     newState.chargeCooldown -= dt;
+    if (newState.chargeCooldown <= 0) {
+      newState.chargeCooldown = 0;
+      newState.chargedProcess = null;
+    }
   }
 
   // Update time tracking
@@ -519,10 +540,32 @@ export function buyProcess(
 }
 
 /**
+ * Activate Elemental Charge (Carbonaceous special) — spend 5% density to boost a process by 50% for 8 seconds.
+ */
+export function activateElementalCharge(state: GameState, processId: string): GameState | null {
+  if (state.composition !== 'carbonaceous') return null;
+  if (state.chargeCooldown > 0) return null; // already charging
+  if (state.density < 5) return null; // need at least 5% density to spend 5%
+
+  return {
+    ...state,
+    density: state.density - 5,
+    chargedProcess: processId,
+    chargeCooldown: 8, // 8 seconds
+  };
+}
+
+/**
  * Calculate comet value based on current state.
  */
 export function getCometValue(state: GameState): number {
-  let value = (state.mass + state.gravity * 100 + state.density * 1000) * 0.05;
+  // Base: 2% of current mass, upgradeable by comet_power (adds 0.1% per level, up to 30 levels = +3% = 5% total)
+  const cometPowerLevel = state.coreUpgrades['comet_power'] || 0;
+  const basePercent = 0.02 + cometPowerLevel * 0.001;
+  let value = state.mass * basePercent;
+
+  // Minimum value so comets aren't worthless at low mass
+  value = Math.max(value, 1);
 
   if (state.composition === 'ice') {
     value *= 1.5;
@@ -546,13 +589,13 @@ export function getCometValue(state: GameState): number {
  */
 function getNextCometInterval(state: GameState): number {
   if (state.composition === 'ice') {
-    let cometInterval = 3 + Math.random() * 5;
+    let cometInterval = 10 + Math.random() * 20; // 10-30 seconds
     if (state.discoveries.includes('ice_comets')) {
-      cometInterval *= 0.67;
+      cometInterval *= 0.67; // Frozen Fortune: shorter intervals
     }
     return cometInterval;
   }
-  return 15 + Math.random() * 15;
+  return 30 + Math.random() * 30; // 30-60 seconds for non-ice
 }
 
 /**
@@ -565,7 +608,7 @@ export function spawnVisualComet(state: GameState): GameState {
     value,
     x: 10 + Math.random() * 80, // 10-90% horizontal
     y: 10 + Math.random() * 60, // 10-70% vertical
-    timeLeft: 5, // 5 seconds to tap
+    timeLeft: 8, // 8 seconds to tap
     speed: 3 + Math.random() * 4, // drift speed
     angle: Math.random() * Math.PI * 2, // random direction
   };
