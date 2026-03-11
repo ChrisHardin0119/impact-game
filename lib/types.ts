@@ -91,12 +91,14 @@ export interface GameState {
 
   // Ad boosts
   activeBoosts: {
-    velocityDouble: { active: boolean; endsAt: number };
+    productionDouble: { active: boolean; endsAt: number };
   };
   nextShardAdIn: number;
-  nextVelocityAdIn: number;
+  nextProductionAdIn: number;
+  nextMassDropAdIn: number;
   shardAdAvailable: boolean;
-  velocityAdAvailable: boolean;
+  productionAdAvailable: boolean;
+  massDropAdAvailable: boolean;
 
   // Dev mode
   devMode: boolean;

@@ -51,9 +51,11 @@ export function getProduction(state: GameState): {
   velocityPS *= achieveEff.velocityMult * achieveEff.allMult;
   energyPS *= achieveEff.energyMult * achieveEff.allMult;
 
-  // Velocity double boost
-  if (state.activeBoosts.velocityDouble.active && Date.now() < state.activeBoosts.velocityDouble.endsAt) {
+  // Production double boost (from ad)
+  if (state.activeBoosts.productionDouble.active && Date.now() < state.activeBoosts.productionDouble.endsAt) {
+    massPS *= 2;
     velocityPS *= 2;
+    energyPS *= 2;
   }
 
   // Composition multipliers
@@ -310,18 +312,25 @@ export function processTick(state: GameState, dt: number): GameState {
     }
   }
 
-  if (!s.velocityAdAvailable) {
-    s.nextVelocityAdIn -= dt;
-    if (s.nextVelocityAdIn <= 0) {
-      s.velocityAdAvailable = true;
+  if (!s.productionAdAvailable) {
+    s.nextProductionAdIn -= dt;
+    if (s.nextProductionAdIn <= 0) {
+      s.productionAdAvailable = true;
     }
   }
 
-  // Check if velocity boost expired
-  if (s.activeBoosts.velocityDouble.active && Date.now() >= s.activeBoosts.velocityDouble.endsAt) {
+  if (!s.massDropAdAvailable) {
+    s.nextMassDropAdIn -= dt;
+    if (s.nextMassDropAdIn <= 0) {
+      s.massDropAdAvailable = true;
+    }
+  }
+
+  // Check if production boost expired
+  if (s.activeBoosts.productionDouble.active && Date.now() >= s.activeBoosts.productionDouble.endsAt) {
     s.activeBoosts = {
       ...s.activeBoosts,
-      velocityDouble: { active: false, endsAt: 0 },
+      productionDouble: { active: false, endsAt: 0 },
     };
   }
 
