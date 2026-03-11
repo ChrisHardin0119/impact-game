@@ -444,7 +444,7 @@ export default function GamePage() {
   return (
     <div className="scanlines flex flex-col game-shell no-select safe-top">
       {/* Resource Header */}
-      <div className="bg-space-light border-b border-gray-700 px-5 sm:px-6 py-2.5 safe-x">
+      <div className="bg-space-light border-b border-gray-700 px-5 sm:px-6 py-2.5">
         <div className="flex items-center justify-between mb-1.5">
           <div className="flex items-center gap-2 sm:gap-4 min-w-0">
             <span className="glow-cyan font-bold text-base sm:text-xl truncate">{currentTierDef.emoji} {currentTierDef.name}</span>
@@ -500,7 +500,7 @@ export default function GamePage() {
       <BoostBar state={state} onActivateBoost={handleActivateBoost} />
 
       {/* Tab Navigation */}
-      <div className="tab-bar border-b border-gray-700 bg-space-light px-3 safe-x">
+      <div className="tab-bar border-b border-gray-700 bg-space-light px-3">
         {tabs.map(t => (
           <button key={t.id} className={`tab whitespace-nowrap flex-1 justify-center ${activeTab === t.id ? 'tab-active' : ''}`} onClick={() => setTab(t.id)}>
             <span className="sm:mr-1">{t.icon}</span><span className="hidden sm:inline">{t.label}</span>
@@ -509,7 +509,7 @@ export default function GamePage() {
       </div>
 
       {/* Content Area */}
-      <div ref={scrollRef} className="flex-1 overflow-y-auto px-5 sm:px-6 py-3 pb-16 safe-bottom safe-x">
+      <div ref={scrollRef} className="flex-1 overflow-y-auto px-5 sm:px-6 py-3 pb-16 safe-bottom">
         {/* Composition Picker */}
         {!state.composition && activeTab === 'build' && (
           <div className="mb-4">
