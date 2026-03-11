@@ -42,16 +42,22 @@ export function defaultGameState(): GameState {
     buyMode: 1,
     activeBoosts: {
       productionDouble: { active: false, endsAt: 0 },
+      velocityDouble: { active: false, endsAt: 0 },
     },
-    nextShardAdIn: 600 + Math.random() * 600,
-    nextProductionAdIn: 900 + Math.random() * 900,
-    nextMassDropAdIn: 300 + Math.random() * 300,
-    shardAdAvailable: false,
-    productionAdAvailable: false,
-    massDropAdAvailable: false,
-    shardAdExpiresIn: 0,
-    productionAdExpiresIn: 0,
-    massDropAdExpiresIn: 0,
+    // 3 floating ad buttons — available immediately
+    productionAdAvailable: true,
+    nextProductionAdIn: 0,
+    shardDoubleActive: false,
+    shardDoubleAdAvailable: true,
+    massDropAdAvailable: true,
+    nextMassDropAdIn: 0,
+    // 2 popup ads — both every 20-40 min, 60s expiry
+    shardPopupAvailable: false,
+    shardPopupExpiresIn: 0,
+    nextShardPopupIn: 1200 + Math.random() * 1200,
+    velocityPopupAvailable: false,
+    velocityPopupExpiresIn: 0,
+    nextVelocityPopupIn: 1200 + Math.random() * 1200,
     devMode: false,
     tutorialCompleted: [],
     tutorialSkipped: false,
@@ -111,6 +117,22 @@ export function getPrestigeResetState(state: GameState): GameState {
     tutorialCompleted: state.tutorialCompleted,
     tutorialSkipped: state.tutorialSkipped,
     adsRemoved: state.adsRemoved,
+    // Preserve active boosts across impact
+    activeBoosts: state.activeBoosts,
+    // Floating ads: keep production/mass drop state, reset shard double (used on impact)
+    productionAdAvailable: state.productionAdAvailable,
+    nextProductionAdIn: state.nextProductionAdIn,
+    massDropAdAvailable: state.massDropAdAvailable,
+    nextMassDropAdIn: state.nextMassDropAdIn,
+    shardDoubleActive: false,              // reset — it was consumed by this impact
+    shardDoubleAdAvailable: true,          // button comes back after impact
+    // Popup ads: preserve timers
+    shardPopupAvailable: state.shardPopupAvailable,
+    shardPopupExpiresIn: state.shardPopupExpiresIn,
+    nextShardPopupIn: state.nextShardPopupIn,
+    velocityPopupAvailable: state.velocityPopupAvailable,
+    velocityPopupExpiresIn: state.velocityPopupExpiresIn,
+    nextVelocityPopupIn: state.nextVelocityPopupIn,
     activeTab: state.velocityUnlockReady ? 'velocity' : 'metals',
     version: 13.1,
   };

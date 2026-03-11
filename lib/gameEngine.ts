@@ -58,6 +58,11 @@ export function getProduction(state: GameState): {
     energyPS *= 2;
   }
 
+  // Velocity double boost (from popup ad)
+  if (state.activeBoosts.velocityDouble.active && Date.now() < state.activeBoosts.velocityDouble.endsAt) {
+    velocityPS *= 2;
+  }
+
   // Composition multipliers
   if (state.composition) {
     const comp = getCompositionDef(state.composition);
@@ -304,52 +309,55 @@ export function processTick(state: GameState, dt: number): GameState {
       .filter(c => c.timeLeft > 0);
   }
 
-  // === AD BOOST TIMERS ===
-  // Shard ad: every 10-20 min, 60s expiry
-  if (s.totalPrestigeCount >= 1 && !s.shardAdAvailable) {
-    s.nextShardAdIn -= dt;
-    if (s.nextShardAdIn <= 0) {
-      s.shardAdAvailable = true;
-      s.shardAdExpiresIn = 60;
-    }
-  }
-  if (s.shardAdAvailable && !s.adsRemoved) {
-    s.shardAdExpiresIn -= dt;
-    if (s.shardAdExpiresIn <= 0) {
-      s.shardAdAvailable = false;
-      s.nextShardAdIn = 600 + Math.random() * 600;
-    }
-  }
-
-  // Production ad: every 30 min, 60s expiry
+  // === FLOATING AD COOLDOWNS (no expiry — persist until claimed) ===
+  // Production ad cooldown
   if (!s.productionAdAvailable) {
     s.nextProductionAdIn -= dt;
     if (s.nextProductionAdIn <= 0) {
       s.productionAdAvailable = true;
-      s.productionAdExpiresIn = 60;
-    }
-  }
-  if (s.productionAdAvailable && !s.adsRemoved) {
-    s.productionAdExpiresIn -= dt;
-    if (s.productionAdExpiresIn <= 0) {
-      s.productionAdAvailable = false;
-      s.nextProductionAdIn = 1800;
     }
   }
 
-  // Mass drop ad: every 5-10 min, 60s expiry
+  // Mass drop ad cooldown
   if (!s.massDropAdAvailable) {
     s.nextMassDropAdIn -= dt;
     if (s.nextMassDropAdIn <= 0) {
       s.massDropAdAvailable = true;
-      s.massDropAdExpiresIn = 60;
     }
   }
-  if (s.massDropAdAvailable && !s.adsRemoved) {
-    s.massDropAdExpiresIn -= dt;
-    if (s.massDropAdExpiresIn <= 0) {
-      s.massDropAdAvailable = false;
-      s.nextMassDropAdIn = 300 + Math.random() * 300;
+
+  // (shardDoubleAdAvailable resets after impact in prestige logic — no cooldown tick needed)
+
+  // === POPUP AD TIMERS (spawn periodically, 60s expiry) ===
+  // +10% Shard popup (requires at least 1 prestige)
+  if (s.totalPrestigeCount >= 1 && !s.shardPopupAvailable) {
+    s.nextShardPopupIn -= dt;
+    if (s.nextShardPopupIn <= 0) {
+      s.shardPopupAvailable = true;
+      s.shardPopupExpiresIn = 60;
+    }
+  }
+  if (s.shardPopupAvailable && !s.adsRemoved) {
+    s.shardPopupExpiresIn -= dt;
+    if (s.shardPopupExpiresIn <= 0) {
+      s.shardPopupAvailable = false;
+      s.nextShardPopupIn = 1200 + Math.random() * 1200;
+    }
+  }
+
+  // 2x Velocity popup (requires velocity tab unlocked)
+  if (s.unlockedTabs['velocity'] && !s.velocityPopupAvailable) {
+    s.nextVelocityPopupIn -= dt;
+    if (s.nextVelocityPopupIn <= 0) {
+      s.velocityPopupAvailable = true;
+      s.velocityPopupExpiresIn = 60;
+    }
+  }
+  if (s.velocityPopupAvailable && !s.adsRemoved) {
+    s.velocityPopupExpiresIn -= dt;
+    if (s.velocityPopupExpiresIn <= 0) {
+      s.velocityPopupAvailable = false;
+      s.nextVelocityPopupIn = 1200 + Math.random() * 1200;
     }
   }
 
@@ -358,6 +366,14 @@ export function processTick(state: GameState, dt: number): GameState {
     s.activeBoosts = {
       ...s.activeBoosts,
       productionDouble: { active: false, endsAt: 0 },
+    };
+  }
+
+  // Check if velocity boost expired
+  if (s.activeBoosts.velocityDouble.active && Date.now() >= s.activeBoosts.velocityDouble.endsAt) {
+    s.activeBoosts = {
+      ...s.activeBoosts,
+      velocityDouble: { active: false, endsAt: 0 },
     };
   }
 

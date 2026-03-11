@@ -259,7 +259,8 @@ export default function GamePage() {
     const shardEff = getShardEffects(s.shardUpgrades);
     const achieveEff = getAchievementEffects(s);
     const energyEff = getEnergyEffects(s);
-    const bonusMult = shardEff.massMult * achieveEff.shardMult * (1 + (energyEff.shardMult - 1));
+    const shardDoubleMult = s.shardDoubleActive ? 2 : 1;
+    const bonusMult = shardEff.massMult * achieveEff.shardMult * (1 + (energyEff.shardMult - 1)) * shardDoubleMult;
     const earnedShards = calcShards(s.runMassEarned, s.currentTier, bonusMult);
     let newState = getPrestigeResetState(s);
     newState.currentShards += earnedShards;
@@ -283,14 +284,8 @@ export default function GamePage() {
   }, [setState]);
 
   // === AD HANDLERS ===
-  const handleShardAd = useCallback(() => {
-    const s = stateRef.current;
-    if (!s.shardAdAvailable) return;
-    const bonus = Math.max(1, Math.floor(s.lifetimeShards * 0.1));
-    setState({ ...s, currentShards: s.currentShards + bonus, lifetimeShards: s.lifetimeShards + bonus, shardAdAvailable: false, nextShardAdIn: 600 + Math.random() * 600, shardAdExpiresIn: 0 });
-    setAdPopup(null);
-  }, [setState]);
 
+  // FLOATING: 2x Production (30 min boost)
   const handleProductionAd = useCallback(() => {
     const s = stateRef.current;
     if (!s.productionAdAvailable) return;
@@ -299,11 +294,19 @@ export default function GamePage() {
       activeBoosts: { ...s.activeBoosts, productionDouble: { active: true, endsAt: Date.now() + 30 * 60 * 1000 } },
       productionAdAvailable: false,
       nextProductionAdIn: 1800,
-      productionAdExpiresIn: 0,
     });
     setAdPopup(null);
   }, [setState]);
 
+  // FLOATING: 2x Shards on Next Impact
+  const handleShardDoubleAd = useCallback(() => {
+    const s = stateRef.current;
+    if (!s.shardDoubleAdAvailable || s.shardDoubleActive) return;
+    setState({ ...s, shardDoubleActive: true, shardDoubleAdAvailable: false });
+    setAdPopup(null);
+  }, [setState]);
+
+  // FLOATING: Mass Drop (instant mass)
   const handleMassDropAd = useCallback(() => {
     const s = stateRef.current;
     if (!s.massDropAdAvailable) return;
@@ -316,9 +319,36 @@ export default function GamePage() {
       totalMassEarned: s.totalMassEarned + drop,
       massDropAdAvailable: false,
       nextMassDropAdIn: 300 + Math.random() * 300,
-      massDropAdExpiresIn: 0,
     });
     setAdPopup(null);
+  }, [setState]);
+
+  // POPUP: +10% Shards
+  const handleShardPopup = useCallback(() => {
+    const s = stateRef.current;
+    if (!s.shardPopupAvailable) return;
+    const bonus = Math.max(1, Math.floor(s.lifetimeShards * 0.1));
+    setState({
+      ...s,
+      currentShards: s.currentShards + bonus,
+      lifetimeShards: s.lifetimeShards + bonus,
+      shardPopupAvailable: false,
+      nextShardPopupIn: 1200 + Math.random() * 1200,
+      shardPopupExpiresIn: 0,
+    });
+  }, [setState]);
+
+  // POPUP: 2x Velocity (20 min boost)
+  const handleVelocityPopup = useCallback(() => {
+    const s = stateRef.current;
+    if (!s.velocityPopupAvailable) return;
+    setState({
+      ...s,
+      activeBoosts: { ...s.activeBoosts, velocityDouble: { active: true, endsAt: Date.now() + 20 * 60 * 1000 } },
+      velocityPopupAvailable: false,
+      nextVelocityPopupIn: 1200 + Math.random() * 1200,
+      velocityPopupExpiresIn: 0,
+    });
   }, [setState]);
 
   const handleRemoveAds = useCallback(() => {
@@ -329,7 +359,7 @@ export default function GamePage() {
   }, [setState]);
 
   const handleDevPasscode = useCallback(() => {
-    if (devPasscode === '9173') { setState({ ...stateRef.current, devMode: true }); setDevPasscode(''); }
+    if (devPasscode === '89116282') { setState({ ...stateRef.current, devMode: true }); setDevPasscode(''); }
   }, [devPasscode, setState]);
 
   const handleHardReset = useCallback(() => {
@@ -356,6 +386,8 @@ export default function GamePage() {
   const comboMult = getComboMult(clickCombo);
   const isProductionBoosted = state.activeBoosts.productionDouble.active && Date.now() < state.activeBoosts.productionDouble.endsAt;
   const boostTimeLeft = isProductionBoosted ? Math.max(0, (state.activeBoosts.productionDouble.endsAt - Date.now()) / 1000) : 0;
+  const isVelocityBoosted = state.activeBoosts.velocityDouble.active && Date.now() < state.activeBoosts.velocityDouble.endsAt;
+  const velBoostTimeLeft = isVelocityBoosted ? Math.max(0, (state.activeBoosts.velocityDouble.endsAt - Date.now()) / 1000) : 0;
 
   const expulsionRate = getExpulsionRate(state.shardUpgrades);
   let effectiveExpulsionRate = expulsionRate;
@@ -470,7 +502,8 @@ export default function GamePage() {
             <div className="text-3xl mb-2">💥</div>
             <div className="text-xl font-bold mb-2 glow-orange">Impact Warning!</div>
             <div className="text-[var(--color-gray-400)] mb-2 text-sm">This will RESET your mass, velocity, buildings, and energy upgrades.</div>
-            <div className="font-bold mb-4" style={{ color: 'var(--color-green)' }}>+{fmt(calcShards(state.runMassEarned, state.currentTier))} Shards</div>
+            <div className="font-bold mb-1" style={{ color: 'var(--color-green)' }}>+{fmt(calcShards(state.runMassEarned, state.currentTier, state.shardDoubleActive ? 2 : 1))} Shards</div>
+            {state.shardDoubleActive && <div className="text-xs mb-3 badge badge-yellow" style={{ display: 'inline-block' }}>💎 2x ACTIVE</div>}
             <div className="flex gap-3">
               <button onClick={() => setShowImpactWarning(false)} className="btn-secondary flex-1">Cancel</button>
               <button onClick={confirmImpact} className="btn-primary flex-1">Impact!</button>
@@ -532,10 +565,17 @@ export default function GamePage() {
           </div>
           <div className="flex items-center gap-2">
             {isProductionBoosted && <span className="badge badge-green">2x {fmtTime(boostTimeLeft)}</span>}
+            {isVelocityBoosted && <span className="badge badge-purple">🚀2x {fmtTime(velBoostTimeLeft)}</span>}
+            {state.shardDoubleActive && <span className="badge badge-yellow">💎2x</span>}
             {state.currentShards > 0 && <span className="badge badge-orange">💎 {fmt(state.currentShards)}</span>}
             {!state.adsRemoved && (
               <button className="no-ads-btn" onClick={() => setShowNoAdsPurchase(true)} title="Remove Ads">
-                <span style={{ fontSize: '0.65rem', lineHeight: 1 }}>🚫</span>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  {/* Play triangle (ad symbol) */}
+                  <path d="M8 6.5v11l9-5.5-9-5.5z" fill="white" opacity="0.9"/>
+                  {/* Red diagonal line (no symbol) */}
+                  <line x1="3" y1="3" x2="21" y2="21" stroke="#ff3366" strokeWidth="3" strokeLinecap="round"/>
+                </svg>
               </button>
             )}
           </div>
@@ -559,44 +599,71 @@ export default function GamePage() {
         </div>
       </div>
 
-      {/* === FLOATING AD BUTTONS (positioned in negative space, left edge) === */}
+      {/* === 3 FLOATING AD BUTTONS (right edge, persist until claimed) === */}
       {state.productionAdAvailable && (
-        <div className="ad-float-btn ad-float-btn-production" style={{ left: 8, top: '35%' }}
+        <div className="ad-float-btn ad-float-btn-production" style={{ right: 6, top: '32%' }}
           onClick={() => adPopup === 'production' ? handleProductionAd() : setAdPopup('production')}>
-          <span style={{ fontSize: '1rem', fontWeight: 900 }}>2x</span>
-          <span style={{ fontSize: '0.5rem' }}>✦✦✦</span>
-          {!state.adsRemoved && <div className="ad-timer" style={{ color: '#ffcc00' }}>{Math.ceil(state.productionAdExpiresIn)}s</div>}
+          <span style={{ fontSize: '0.95rem', fontWeight: 900 }}>2x</span>
+          <span style={{ fontSize: '0.45rem' }}>✦✦✦</span>
         </div>
       )}
-      {state.shardAdAvailable && (
-        <div className="ad-float-btn ad-float-btn-shard" style={{ left: 8, top: '50%' }}
-          onClick={() => adPopup === 'shard' ? handleShardAd() : setAdPopup('shard')}>
-          <span style={{ fontSize: '1.1rem' }}>💎</span>
-          {!state.adsRemoved && <div className="ad-timer" style={{ color: 'var(--color-orange)' }}>{Math.ceil(state.shardAdExpiresIn)}s</div>}
+      {state.shardDoubleAdAvailable && !state.shardDoubleActive && (
+        <div className="ad-float-btn ad-float-btn-shard" style={{ right: 6, top: '46%' }}
+          onClick={() => adPopup === 'shardDouble' ? handleShardDoubleAd() : setAdPopup('shardDouble')}>
+          <span style={{ fontSize: '0.7rem', fontWeight: 900 }}>💎2x</span>
         </div>
       )}
       {state.massDropAdAvailable && (
-        <div className="ad-float-btn ad-float-btn-mass" style={{ left: 8, top: '65%' }}
+        <div className="ad-float-btn ad-float-btn-mass" style={{ right: 6, top: '60%' }}
           onClick={() => adPopup === 'mass' ? handleMassDropAd() : setAdPopup('mass')}>
-          <span style={{ fontSize: '1.1rem' }}>📦</span>
-          {!state.adsRemoved && <div className="ad-timer" style={{ color: 'var(--color-neon)' }}>{Math.ceil(state.massDropAdExpiresIn)}s</div>}
+          <span style={{ fontSize: '1rem' }}>📦</span>
         </div>
       )}
 
-      {/* === AD INFO POPUP === */}
+      {/* === 2 POPUP ADS (appear periodically, 60s timer) === */}
+      {state.shardPopupAvailable && (
+        <button className="comet-button" style={{ left: '20%', top: '40%' }}
+          onClick={handleShardPopup}>
+          <div className="comet-inner" style={{
+            borderColor: 'var(--color-orange)',
+            background: 'radial-gradient(ellipse at center, rgba(255,107,43,0.25), rgba(255,60,0,0.1), transparent 70%)',
+            boxShadow: '0 0 20px rgba(255,107,43,0.4), 0 0 40px rgba(255,60,0,0.2), inset 0 0 12px rgba(255,107,43,0.15)',
+          }}>
+            <span style={{ fontSize: '0.7rem', fontWeight: 900, color: 'var(--color-orange)' }}>+10%</span>
+            <span style={{ fontSize: '0.9rem' }}>💎</span>
+          </div>
+          <div className="comet-timer" style={{ width: `${(state.shardPopupExpiresIn / 60) * 100}%` }} />
+        </button>
+      )}
+      {state.velocityPopupAvailable && (
+        <button className="comet-button" style={{ left: '75%', top: '35%' }}
+          onClick={handleVelocityPopup}>
+          <div className="comet-inner" style={{
+            borderColor: 'var(--color-purple)',
+            background: 'radial-gradient(ellipse at center, rgba(180,74,255,0.25), rgba(120,30,200,0.1), transparent 70%)',
+            boxShadow: '0 0 20px rgba(180,74,255,0.4), 0 0 40px rgba(120,30,200,0.2), inset 0 0 12px rgba(180,74,255,0.15)',
+          }}>
+            <span style={{ fontSize: '0.7rem', fontWeight: 900, color: 'var(--color-purple)' }}>2x</span>
+            <span style={{ fontSize: '0.9rem' }}>🚀</span>
+          </div>
+          <div className="comet-timer" style={{ width: `${(state.velocityPopupExpiresIn / 60) * 100}%`, background: 'linear-gradient(90deg, var(--color-purple), var(--color-purple-dim))' }} />
+        </button>
+      )}
+
+      {/* === FLOATING AD INFO POPUP === */}
       {adPopup && (
-        <div className="fixed inset-0 z-[49]" onClick={() => setAdPopup(null)}>
-          <div className="ad-popup" style={{ left: 72, top: adPopup === 'production' ? '33%' : adPopup === 'shard' ? '48%' : adPopup === 'mass' ? '63%' : '33%' }}
+        <div className="absolute inset-0 z-[49]" onClick={() => setAdPopup(null)}>
+          <div className="ad-popup" style={{ right: 64, top: adPopup === 'production' ? '31%' : adPopup === 'shardDouble' ? '45%' : '59%' }}
             onClick={e => e.stopPropagation()}>
             {adPopup === 'production' && <>
               <div className="font-bold text-sm mb-1" style={{ color: '#ffcc00' }}>⭐ 2x Production</div>
               <div className="text-xs text-[var(--color-gray-400)] mb-2">Doubles ALL production (mass, velocity, energy) for 30 minutes!</div>
               <button onClick={handleProductionAd} className="btn-primary w-full text-xs">{state.adsRemoved ? 'Activate!' : '📺 Watch Ad'}</button>
             </>}
-            {adPopup === 'shard' && <>
-              <div className="font-bold text-sm mb-1" style={{ color: 'var(--color-orange)' }}>💎 Bonus Shards</div>
-              <div className="text-xs text-[var(--color-gray-400)] mb-2">Get +{fmt(Math.max(1, Math.floor(state.lifetimeShards * 0.1)))} shards (10% of your lifetime total)!</div>
-              <button onClick={handleShardAd} className="btn-primary w-full text-xs">{state.adsRemoved ? 'Collect!' : '📺 Watch Ad'}</button>
+            {adPopup === 'shardDouble' && <>
+              <div className="font-bold text-sm mb-1" style={{ color: 'var(--color-orange)' }}>💎 2x Shards</div>
+              <div className="text-xs text-[var(--color-gray-400)] mb-2">Doubles your shard reward on the NEXT Impact! Resets after use.</div>
+              <button onClick={handleShardDoubleAd} className="btn-primary w-full text-xs">{state.adsRemoved ? 'Activate!' : '📺 Watch Ad'}</button>
             </>}
             {adPopup === 'mass' && <>
               <div className="font-bold text-sm mb-1" style={{ color: 'var(--color-neon)' }}>📦 Mass Drop</div>
@@ -614,12 +681,14 @@ export default function GamePage() {
             <div className="text-3xl mb-2">🚫📺</div>
             <div className="text-lg font-bold mb-2 glow-cyan">Remove Ads — $5</div>
             <div className="text-[var(--color-gray-400)] text-xs mb-3" style={{ lineHeight: '1.6' }}>
-              All 3 ad bonuses still appear on the same schedule, but you collect them instantly with a single tap — no ads to watch!
+              All 5 ad bonuses still appear on the same schedule, but you collect them instantly with a single tap — no ads to watch!
             </div>
             <div className="space-y-1 text-left text-xs mb-4" style={{ color: 'var(--color-green)' }}>
               <div>✅ 2x Production (30 min) — instant</div>
-              <div>✅ Bonus Shards — instant</div>
+              <div>✅ 2x Shards on Next Impact — instant</div>
               <div>✅ Mass Drops — instant</div>
+              <div>✅ +10% Shard Popups — instant</div>
+              <div>✅ 2x Velocity Popups — instant</div>
               <div>✅ No expiry timer pressure</div>
             </div>
             <div className="flex gap-3">
@@ -1025,10 +1094,10 @@ export default function GamePage() {
               <button onClick={() => { const s = stateRef.current; setState({ ...s, mass: s.mass + 1e12, totalMassEarned: s.totalMassEarned + 1e12, runMassEarned: s.runMassEarned + 1e12 }); }} className="btn-secondary text-xs">+1T Mass (run)</button>
               <button onClick={() => setState({ ...stateRef.current, expulsionCooldown: 0 })} className="btn-secondary text-xs">Reset Cooldown</button>
               <button onClick={() => { const s = stateRef.current; const all: Record<string, boolean> = {}; TAB_UNLOCKS.forEach(t => all[t.tabId] = true); setState({ ...s, unlockedTabs: { ...s.unlockedTabs, ...all } }); }} className="btn-secondary text-xs col-span-2">Unlock All Tabs</button>
-              <button onClick={() => setState({ ...stateRef.current, shardAdAvailable: true, productionAdAvailable: true, massDropAdAvailable: true, shardAdExpiresIn: 60, productionAdExpiresIn: 60, massDropAdExpiresIn: 60 })} className="btn-secondary text-xs col-span-2">Force All Ads</button>
+              <button onClick={() => { const s = stateRef.current; setState({ ...s, productionAdAvailable: true, shardDoubleAdAvailable: true, shardDoubleActive: false, massDropAdAvailable: true, shardPopupAvailable: true, shardPopupExpiresIn: 60, velocityPopupAvailable: true, velocityPopupExpiresIn: 60 }); }} className="btn-secondary text-xs col-span-2">Force All Ads</button>
               <button onClick={() => setState({ ...stateRef.current, adsRemoved: !stateRef.current.adsRemoved })} className="btn-secondary text-xs col-span-2">Toggle No Ads ({stateRef.current.adsRemoved ? 'ON' : 'OFF'})</button>
             </div>
-            <div className="text-[var(--color-gray-600)] text-xs mt-3 text-center">v13.3 — Floating ads + hidden achievements</div>
+            <div className="text-[var(--color-gray-600)] text-xs mt-3 text-center">v13.4 — 5-ad system</div>
           </>
         )}
       </div>

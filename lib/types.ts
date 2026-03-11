@@ -89,19 +89,32 @@ export interface GameState {
   activeTab: TabName;
   buyMode: BuyMode;
 
-  // Ad boosts
+  // Active timed boosts
   activeBoosts: {
     productionDouble: { active: boolean; endsAt: number };
+    velocityDouble: { active: boolean; endsAt: number };
   };
-  nextShardAdIn: number;
-  nextProductionAdIn: number;
-  nextMassDropAdIn: number;
-  shardAdAvailable: boolean;
+
+  // === 3 FLOATING AD BUTTONS (persist on screen, no expiry, cooldown after use) ===
+  // 2x Production — doubles all production for 30 min
   productionAdAvailable: boolean;
+  nextProductionAdIn: number;
+  // 2x Shards on Next Impact — doubles shard reward on next prestige
+  shardDoubleActive: boolean;         // is the 2x shard buff active for next impact?
+  shardDoubleAdAvailable: boolean;    // is the button visible?
+  // Mass Drop — instant mass bonus
   massDropAdAvailable: boolean;
-  shardAdExpiresIn: number;
-  productionAdExpiresIn: number;
-  massDropAdExpiresIn: number;
+  nextMassDropAdIn: number;
+
+  // === 2 POPUP ADS (appear periodically with 60s expiry) ===
+  // +10% Shards popup
+  shardPopupAvailable: boolean;
+  shardPopupExpiresIn: number;
+  nextShardPopupIn: number;
+  // 2x Velocity popup (only after velocity tab unlocked)
+  velocityPopupAvailable: boolean;
+  velocityPopupExpiresIn: number;
+  nextVelocityPopupIn: number;
 
   // Dev mode
   devMode: boolean;
