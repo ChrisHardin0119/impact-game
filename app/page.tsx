@@ -258,11 +258,23 @@ export default function GamePage() {
     setTimeout(() => setFloatingNums(prev => prev.filter(f => f.id !== id)), 1000);
   }, [setState, clickCombo]);
 
-  // Mini asteroid click — scrolls back to top
+  // Mini asteroid click — acts as clicking the asteroid (earns mass)
   const handleMiniClick = useCallback(() => {
     if (isDragging.current) return;
-    scrollRef.current?.scrollTo({ top: 0, behavior: 'smooth' });
-  }, []);
+    // Same combo logic as main asteroid
+    setClickCombo(prev => {
+      const newCombo = Math.min(prev + 1, 20);
+      if (comboTimerRef.current) clearTimeout(comboTimerRef.current);
+      comboTimerRef.current = setTimeout(() => setClickCombo(0), 1500);
+      return newCombo;
+    });
+    const comboMult = 1 + (Math.min(clickCombo, 20) / 20) * 4;
+    const newState = processClick(stateRef.current, comboMult);
+    if (clickCombo > (newState.maxComboReached || 0)) {
+      newState.maxComboReached = clickCombo;
+    }
+    setState(newState);
+  }, [setState, clickCombo]);
 
   // Buy info helper
   const getBuyInfo = useCallback((processDef: typeof PROCESSES[0], owned: number, mass: number, buyMode: BuyMode, hasDiscount: boolean) => {
@@ -426,13 +438,13 @@ export default function GamePage() {
   const unlockedComps = getUnlockedCompositions(state.currentTier);
   const unlockedOM = getUnlockedOM(state.currentTier);
 
-  // Whether we're on the build tab (show asteroid area or mini)
-  const showMiniAsteroid = isScrolled && activeTab === 'build';
+  // Show mini asteroid whenever scrolled on build tab, or always on other tabs
+  const showMiniAsteroid = activeTab !== 'build' || isScrolled;
 
   return (
     <div className="scanlines flex flex-col game-shell no-select safe-top">
       {/* Resource Header */}
-      <div className="bg-space-light border-b border-gray-700 px-4 sm:px-5 py-2.5 safe-x">
+      <div className="bg-space-light border-b border-gray-700 px-5 sm:px-6 py-2.5 safe-x">
         <div className="flex items-center justify-between mb-1.5">
           <div className="flex items-center gap-2 sm:gap-4 min-w-0">
             <span className="glow-cyan font-bold text-base sm:text-xl truncate">{currentTierDef.emoji} {currentTierDef.name}</span>
@@ -441,7 +453,7 @@ export default function GamePage() {
           <div className="flex gap-2 shrink-0 items-center">
             <button className="btn-secondary text-sm px-2.5 py-1" onClick={() => saveGame(state)}>Save</button>
             <button className="btn-secondary text-sm px-2.5 py-1" onClick={() => setTab('stats')}>⚙</button>
-            <span className="text-xs text-gray-600">v12.2</span>
+            <span className="text-xs text-gray-600">v12.3</span>
           </div>
         </div>
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-x-4 gap-y-2 sm:gap-3">
@@ -488,7 +500,7 @@ export default function GamePage() {
       <BoostBar state={state} onActivateBoost={handleActivateBoost} />
 
       {/* Tab Navigation */}
-      <div className="tab-bar border-b border-gray-700 bg-space-light px-1 safe-x">
+      <div className="tab-bar border-b border-gray-700 bg-space-light px-3 safe-x">
         {tabs.map(t => (
           <button key={t.id} className={`tab whitespace-nowrap flex-1 justify-center ${activeTab === t.id ? 'tab-active' : ''}`} onClick={() => setTab(t.id)}>
             <span className="sm:mr-1">{t.icon}</span><span className="hidden sm:inline">{t.label}</span>
@@ -496,8 +508,8 @@ export default function GamePage() {
         ))}
       </div>
 
-      {/* Content Area — increased horizontal padding */}
-      <div ref={scrollRef} className="flex-1 overflow-y-auto px-4 sm:px-6 py-3 pb-16 safe-bottom safe-x">
+      {/* Content Area */}
+      <div ref={scrollRef} className="flex-1 overflow-y-auto px-5 sm:px-6 py-3 pb-16 safe-bottom safe-x">
         {/* Composition Picker */}
         {!state.composition && activeTab === 'build' && (
           <div className="mb-4">
