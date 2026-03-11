@@ -34,12 +34,13 @@ export function loadGame(): GameState | null {
 
 function migrateState(data: any): GameState {
   const fresh = defaultGameState();
-  return {
+
+  // Handle migration from v13.0 (had density) to v13.1 (expulsion)
+  const migrated = {
     ...fresh,
     ...data,
-    // Ensure all new fields exist
+    // Ensure all new v13.1 fields exist
     metals: data.metals || {},
-    densityItems: data.densityItems || {},
     velocityItems: data.velocityItems || {},
     energyUpgrades: data.energyUpgrades || {},
     unlockedTabs: data.unlockedTabs || {},
@@ -47,13 +48,36 @@ function migrateState(data: any): GameState {
     achievements: data.achievements || [],
     activeComets: data.activeComets || [],
     activeBoosts: data.activeBoosts || fresh.activeBoosts,
-    converterUseCount: data.converterUseCount || 0,
+    expulsionCooldown: data.expulsionCooldown || 0,
+    totalExpulsions: data.totalExpulsions || 0,
+    accumulationUseCount: data.accumulationUseCount || data.converterUseCount || 0,
     tabSwitchCount: data.tabSwitchCount || 0,
     idleStreak: data.idleStreak || 0,
     lastClickTime: data.lastClickTime || 0,
     velocityUnlockReady: data.velocityUnlockReady || false,
-    version: 13,
+    version: 13.1,
   };
+
+  // If they had density tab unlocked, give them expulsion instead
+  if (migrated.unlockedTabs['density']) {
+    migrated.unlockedTabs['expulsion'] = true;
+    delete migrated.unlockedTabs['density'];
+  }
+  // If they had converter tab, remove it (now part of expulsion)
+  delete migrated.unlockedTabs['converter'];
+  delete migrated.unlockedTabs['accumulation'];
+
+  // Remove old density-related fields
+  delete (migrated as any).density;
+  delete (migrated as any).densityItems;
+  delete (migrated as any).converterUseCount;
+
+  // If active tab was density/converter/accumulation, redirect to expulsion
+  if (migrated.activeTab === 'density' || migrated.activeTab === 'converter' || migrated.activeTab === 'accumulation') {
+    migrated.activeTab = 'expulsion';
+  }
+
+  return migrated;
 }
 
 // Migrate from old v2 save — keep permanent progress, reset resources
@@ -61,7 +85,6 @@ function migrateFromV2(oldData: any): GameState {
   const fresh = defaultGameState();
   return {
     ...fresh,
-    // Keep some permanent progress from old save
     lifetimeShards: oldData.lifetimeShards || 0,
     currentShards: oldData.currentShards || 0,
     totalPrestigeCount: oldData.totalPrestigeCount || 0,
@@ -74,7 +97,7 @@ function migrateFromV2(oldData: any): GameState {
     tutorialCompleted: oldData.tutorialCompleted || [],
     tutorialSkipped: oldData.tutorialSkipped || true,
     adsRemoved: oldData.adsRemoved || false,
-    version: 13,
+    version: 13.1,
   };
 }
 
@@ -84,14 +107,8 @@ export function calculateOfflineGains(state: GameState): { state: GameState; off
   if (elapsed < 5) return { state, offlineTime: 0 };
 
   let s = { ...state };
-  // Simple offline calculation — grant production * time * 50% efficiency
-  const prod = {
-    mass: 0, density: 0, velocity: 0, energy: 0,
-  };
-
-  // Quick production calc (simplified)
-  // We'll just use the raw numbers since importing full production calc is circular
-  const massGain = elapsed * 0.5; // placeholder — will be overridden by actual tick
+  // Simple offline: grant a placeholder amount (actual tick will handle real production)
+  const massGain = elapsed * 0.5;
   s.mass += massGain;
   s.runMassEarned += massGain;
   s.totalMassEarned += massGain;

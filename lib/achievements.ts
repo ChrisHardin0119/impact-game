@@ -1,5 +1,4 @@
 import { AchievementDef, GameState } from './types';
-import { getDensity } from './buildings';
 
 export const ACHIEVEMENTS: AchievementDef[] = [
   // === VISIBLE ACHIEVEMENTS ===
@@ -20,15 +19,6 @@ export const ACHIEVEMENTS: AchievementDef[] = [
     bonusDesc: '+2% metal production',
     hidden: false,
     check: (s) => (s.metals['iron_fragments'] || 0) >= 10,
-  },
-  {
-    id: 'getting_dense',
-    name: 'Getting Dense',
-    emoji: '🧊',
-    desc: 'Reach 100 density.',
-    bonusDesc: '+1% density rate',
-    hidden: false,
-    check: (s) => getDensity(s) >= 100,
   },
   {
     id: 'getting_moving',
@@ -67,13 +57,22 @@ export const ACHIEVEMENTS: AchievementDef[] = [
     check: (s) => s.velocity >= 1000,
   },
   {
-    id: 'dense_core',
-    name: 'Dense Core',
-    emoji: '🌑',
-    desc: 'Reach 10,000 density.',
-    bonusDesc: '+2% density rate',
+    id: 'first_expulsion',
+    name: 'First Expulsion',
+    emoji: '💥',
+    desc: 'Jettison mass for the first time.',
+    bonusDesc: '+5% expulsion rate',
     hidden: false,
-    check: (s) => getDensity(s) >= 10000,
+    check: (s) => s.totalExpulsions >= 1,
+  },
+  {
+    id: 'serial_expeller',
+    name: 'Serial Expeller',
+    emoji: '🔥',
+    desc: 'Perform 50 expulsions.',
+    bonusDesc: '+10% expulsion rate',
+    hidden: false,
+    check: (s) => s.totalExpulsions >= 50,
   },
   {
     id: 'impact_survivor',
@@ -130,13 +129,13 @@ export const ACHIEVEMENTS: AchievementDef[] = [
     check: (s) => s.totalPlayTime >= 3600,
   },
   {
-    id: 'converter_pro',
-    name: 'Converter Pro',
+    id: 'accumulator',
+    name: 'Accumulator',
     emoji: '🔄',
-    desc: 'Use the converter 25 times.',
-    bonusDesc: '+3% conversion rate',
+    desc: 'Use accumulation 25 times.',
+    bonusDesc: '+3% accumulation rate',
     hidden: false,
-    check: (s) => s.converterUseCount >= 25,
+    check: (s) => s.accumulationUseCount >= 25,
   },
 
   // === HIDDEN / SILLY ACHIEVEMENTS ===
@@ -180,10 +179,10 @@ export const ACHIEVEMENTS: AchievementDef[] = [
     id: 'all_in',
     name: 'All In',
     emoji: '🎲',
-    desc: 'Convert all of one resource to another.',
-    bonusDesc: '+3% conversion rate',
+    desc: 'Expel all your mass in a single jettison.',
+    bonusDesc: '+3% expulsion rate',
     hidden: true,
-    check: (s) => s.converterUseCount > 0 && (s.mass === 0 || s.velocity === 0),
+    check: (s) => s.totalExpulsions > 0 && s.mass === 0,
   },
   {
     id: 'billionaire',
@@ -199,41 +198,41 @@ export const ACHIEVEMENTS: AchievementDef[] = [
 // Get achievement bonus multipliers
 export function getAchievementEffects(state: GameState): {
   massMult: number;
-  densityMult: number;
   velocityMult: number;
   energyMult: number;
   clickMult: number;
   shardMult: number;
   cometMult: number;
-  conversionMult: number;
+  expulsionMult: number;
+  accumulationMult: number;
   allMult: number;
 } {
   const a = state.achievements;
-  let mass = 1, density = 1, velocity = 1, energy = 1, click = 1, shard = 1, comet = 1, conversion = 1, all = 1;
+  let mass = 1, velocity = 1, energy = 1, click = 1, shard = 1, comet = 1, expulsion = 1, accumulation = 1, all = 1;
 
   if (a.includes('first_steps'))     mass *= 1.01;
   if (a.includes('heavy_metal'))     mass *= 1.02;
-  if (a.includes('getting_dense'))   density *= 1.01;
   if (a.includes('getting_moving'))  velocity *= 1.01;
   if (a.includes('powered_up'))      energy *= 1.01;
   if (a.includes('millionaire'))     click *= 1.01;
   if (a.includes('speed_demon'))     velocity *= 1.02;
-  if (a.includes('dense_core'))      density *= 1.02;
+  if (a.includes('first_expulsion')) expulsion *= 1.05;
+  if (a.includes('serial_expeller')) expulsion *= 1.10;
   if (a.includes('impact_survivor')) shard *= 1.05;
   if (a.includes('serial_impactor')) shard *= 1.10;
   if (a.includes('energy_mogul'))    energy *= 1.02;
   if (a.includes('click_master'))    click *= 1.03;
   if (a.includes('comet_catcher'))   comet *= 1.05;
   if (a.includes('marathon_runner')) all *= 1.01;
-  if (a.includes('converter_pro'))   conversion *= 1.03;
+  if (a.includes('accumulator'))     accumulation *= 1.03;
   if (a.includes('double_tap'))      click *= 1.01;
   if (a.includes('broke'))           mass *= 1.001;
   if (a.includes('tab_surfer'))      all *= 1.005;
   if (a.includes('patience'))        all *= 1.02;
-  if (a.includes('all_in'))          conversion *= 1.03;
+  if (a.includes('all_in'))          expulsion *= 1.03;
   if (a.includes('billionaire'))     all *= 1.02;
 
-  return { massMult: mass, densityMult: density, velocityMult: velocity, energyMult: energy, clickMult: click, shardMult: shard, cometMult: comet, conversionMult: conversion, allMult: all };
+  return { massMult: mass, velocityMult: velocity, energyMult: energy, clickMult: click, shardMult: shard, cometMult: comet, expulsionMult: expulsion, accumulationMult: accumulation, allMult: all };
 }
 
 // Check all achievements and return newly unlocked ones

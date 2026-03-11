@@ -14,22 +14,11 @@ export const ENERGY_UPGRADES: EnergyUpgradeDef[] = [
     effect: 'Auto-buys metals when affordable',
   },
   {
-    id: 'auto_compress',
-    name: 'Auto-Compress',
-    emoji: '🗜️',
-    desc: 'Automatically purchases the cheapest affordable density item.',
-    baseCost: 500,
-    costScale: 1,
-    maxLevel: 1,
-    isToggle: true,
-    effect: 'Auto-buys density items when affordable',
-  },
-  {
     id: 'auto_accelerate',
     name: 'Auto-Accelerate',
     emoji: '🚀',
     desc: 'Automatically purchases the cheapest affordable velocity item.',
-    baseCost: 2000,
+    baseCost: 500,
     costScale: 1,
     maxLevel: 1,
     isToggle: true,
@@ -49,21 +38,10 @@ export const ENERGY_UPGRADES: EnergyUpgradeDef[] = [
     effect: '+3% mass production per level',
   },
   {
-    id: 'density_efficiency',
-    name: 'Density Efficiency',
-    emoji: '🧊',
-    desc: 'Metals produce more density per second.',
-    baseCost: 80,
-    costScale: 1.8,
-    maxLevel: 20,
-    isToggle: false,
-    effect: '+3% density production per level',
-  },
-  {
     id: 'velocity_efficiency',
     name: 'Velocity Efficiency',
-    emoji: '💨',
-    desc: 'Density items produce more velocity per second.',
+    emoji: '🚀',
+    desc: 'Velocity items produce more energy per second.',
     baseCost: 200,
     costScale: 1.8,
     maxLevel: 20,
@@ -135,7 +113,6 @@ export function getEnergyUpgradeEffect(id: string, state: GameState): number {
 // Get all efficiency multipliers from energy upgrades
 export function getEnergyEffects(state: GameState): {
   massMult: number;
-  densityMult: number;
   velocityMult: number;
   energyMult: number;
   clickMult: number;
@@ -145,7 +122,6 @@ export function getEnergyEffects(state: GameState): {
   const levels = state.energyUpgrades || {};
   return {
     massMult: 1 + (levels['mass_efficiency'] || 0) * 0.03,
-    densityMult: 1 + (levels['density_efficiency'] || 0) * 0.03,
     velocityMult: 1 + (levels['velocity_efficiency'] || 0) * 0.03,
     energyMult: 1 + (levels['energy_efficiency'] || 0) * 0.03,
     clickMult: 1 + (levels['click_power'] || 0) * 0.05,

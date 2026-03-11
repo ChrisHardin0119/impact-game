@@ -12,11 +12,9 @@ export const PRESTIGE_TIERS: Record<number, PrestigeTierDef> = {
 export function defaultGameState(): GameState {
   return {
     mass: 0,
-    density: 0,
     velocity: 0,
     energy: 0,
     metals: {},
-    densityItems: {},
     velocityItems: {},
     energyUpgrades: {},
     unlockedTabs: {},
@@ -27,6 +25,8 @@ export function defaultGameState(): GameState {
     currentTier: 0,
     achievements: [],
     composition: null,
+    expulsionCooldown: 0,
+    totalExpulsions: 0,
     runMassEarned: 0,
     totalMassEarned: 0,
     highestMass: 0,
@@ -34,7 +34,7 @@ export function defaultGameState(): GameState {
     totalPlayTime: 0,
     runTime: 0,
     cometsCaught: 0,
-    converterUseCount: 0,
+    accumulationUseCount: 0,
     tabSwitchCount: 0,
     activeComets: [],
     nextCometIn: 60 + Math.random() * 60,
@@ -57,7 +57,7 @@ export function defaultGameState(): GameState {
     idleStreak: 0,
     adsRemoved: false,
     lastSaveTime: Date.now(),
-    version: 13,
+    version: 13.1,
   };
 }
 
@@ -96,17 +96,17 @@ export function getPrestigeResetState(state: GameState): GameState {
     totalClicks: state.totalClicks,
     totalPlayTime: state.totalPlayTime,
     cometsCaught: state.cometsCaught,
-    converterUseCount: state.converterUseCount,
+    accumulationUseCount: state.accumulationUseCount,
+    totalExpulsions: state.totalExpulsions,
     tabSwitchCount: 0,
-    velocityUnlockReady: false, // Reset after unlocking
+    velocityUnlockReady: false,
     fastestPrestige: state.fastestPrestige,
     maxComboReached: state.maxComboReached,
     devMode: state.devMode,
     tutorialCompleted: state.tutorialCompleted,
     tutorialSkipped: state.tutorialSkipped,
     adsRemoved: state.adsRemoved,
-    // If velocity was just unlocked, open that tab so they see it
     activeTab: state.velocityUnlockReady ? 'velocity' : 'metals',
-    version: 13,
+    version: 13.1,
   };
 }

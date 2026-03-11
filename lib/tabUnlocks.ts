@@ -2,33 +2,24 @@ import { TabUnlockDef, ShardUpgradeDef, TabName } from './types';
 
 // === TAB UNLOCK DEFINITIONS ===
 // Each requires a certain number of Impacts + shard cost
-// Designed so each takes ~30 min of gameplay to unlock
 export const TAB_UNLOCKS: TabUnlockDef[] = [
   {
-    tabId: 'density',
-    name: 'Density Compression',
-    emoji: '🧊',
-    desc: 'Unlock the Density tab. Spend density to earn velocity.',
+    tabId: 'expulsion',
+    name: 'Mass Expulsion',
+    emoji: '💨',
+    desc: 'Unlock the Expulsion tab. Jettison mass for velocity, or sacrifice velocity for mass.',
     shardCost: 50,
     requiresPrestige: 1,
   },
   {
     tabId: 'velocity',
     name: 'Velocity Research',
-    emoji: '💨',
+    emoji: '🚀',
     desc: 'Reach 50 velocity, then unlock through your next Impact.',
     shardCost: 0, // No shard cost — uses velocity threshold instead
-    requiresPrestige: 1, // Must have done at least 1 Impact (to have density tab)
+    requiresPrestige: 1, // Must have done at least 1 Impact
     velocityThreshold: 50, // Must reach 50 velocity
     unlockViaImpact: true, // Unlocks after next Impact once threshold met
-  },
-  {
-    tabId: 'converter',
-    name: 'Resource Converter',
-    emoji: '🔄',
-    desc: 'Unlock the Converter tab. Trade resources between types.',
-    shardCost: 500,
-    requiresPrestige: 5,
   },
   {
     tabId: 'energy',
@@ -73,19 +64,29 @@ export const SHARD_UPGRADES: ShardUpgradeDef[] = [
     effect: '+3% click power per level',
   },
   {
-    id: 'shard_density_boost',
-    name: 'Compression Matrix',
-    emoji: '🧊',
-    desc: 'Permanently increase density production.',
+    id: 'shard_expulsion_boost',
+    name: 'Expulsion Efficiency',
+    emoji: '💥',
+    desc: 'Permanently improve mass-to-velocity expulsion rate.',
     baseCost: 30,
     costScale: 1.5,
     maxLevel: 15,
-    effect: '+2% density production per level',
+    effect: '+15% expulsion rate per level',
+  },
+  {
+    id: 'shard_accumulation_boost',
+    name: 'Accumulation Efficiency',
+    emoji: '🔄',
+    desc: 'Permanently improve velocity-to-mass accumulation rate.',
+    baseCost: 40,
+    costScale: 1.5,
+    maxLevel: 15,
+    effect: '+10% accumulation rate per level',
   },
   {
     id: 'shard_velocity_boost',
     name: 'Momentum Drive',
-    emoji: '💨',
+    emoji: '🚀',
     desc: 'Permanently increase velocity production.',
     baseCost: 50,
     costScale: 1.5,
@@ -112,16 +113,18 @@ export function getShardUpgradeCost(def: ShardUpgradeDef, level: number): number
 export function getShardEffects(shardUpgrades: Record<string, number>): {
   massMult: number;
   clickMult: number;
-  densityMult: number;
   velocityMult: number;
   cometMult: number;
+  expulsionMult: number;
+  accumulationMult: number;
 } {
   const u = shardUpgrades || {};
   return {
     massMult: 1 + (u['shard_mass_boost'] || 0) * 0.02,
     clickMult: 1 + (u['shard_click_boost'] || 0) * 0.03,
-    densityMult: 1 + (u['shard_density_boost'] || 0) * 0.02,
     velocityMult: 1 + (u['shard_velocity_boost'] || 0) * 0.03,
     cometMult: 1 + (u['shard_comet_boost'] || 0) * 0.05,
+    expulsionMult: 1 + (u['shard_expulsion_boost'] || 0) * 0.15,
+    accumulationMult: 1 + (u['shard_accumulation_boost'] || 0) * 0.10,
   };
 }

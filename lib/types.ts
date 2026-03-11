@@ -1,9 +1,10 @@
 // ============================================================
-// IMPACT v13 — Complete type system rewrite
-// Resource chain: Mass (Kg) → Density → Velocity → Energy
+// IMPACT v13.1 — Expulsion overhaul
+// Resource chain: Mass (Kg) → Expulsion (jettison mass) → Velocity → Energy
+// Three resources: Mass, Velocity, Energy
 // ============================================================
 
-export type TabName = 'metals' | 'density' | 'velocity' | 'energy' | 'converter' | 'impact' | 'achievements' | 'stats' | 'dev';
+export type TabName = 'metals' | 'expulsion' | 'velocity' | 'energy' | 'impact' | 'achievements' | 'stats' | 'dev';
 export type BuyMode = 1 | 10 | 100 | 'max';
 export type PrestigeTier = 0 | 1 | 2 | 3 | 4 | 5;
 
@@ -35,15 +36,13 @@ export interface AchievementPopup {
 
 // === GAME STATE ===
 export interface GameState {
-  // Primary resources
+  // Primary resources (only 3 now)
   mass: number;          // Kg
-  density: number;       // linked to mass
-  velocity: number;      // m/s — earned from density tab
+  velocity: number;      // m/s — earned by jettisoning mass
   energy: number;        // J — earned from velocity tab
 
   // Building counts
   metals: Record<string, number>;
-  densityItems: Record<string, number>;
   velocityItems: Record<string, number>;
 
   // Energy upgrades (level or toggle state)
@@ -67,6 +66,10 @@ export interface GameState {
   // Composition (chosen at start / after Impact)
   composition: string | null;
 
+  // Expulsion state
+  expulsionCooldown: number;  // seconds remaining until next expulsion
+  totalExpulsions: number;    // lifetime count
+
   // Run tracking
   runMassEarned: number;
   totalMassEarned: number;
@@ -75,7 +78,7 @@ export interface GameState {
   totalPlayTime: number;
   runTime: number;
   cometsCaught: number;
-  converterUseCount: number;
+  accumulationUseCount: number;
   tabSwitchCount: number;
 
   // Comets
@@ -103,7 +106,7 @@ export interface GameState {
   tutorialSkipped: boolean;
 
   // Velocity tab unlock (special: threshold-based, not shard-based)
-  velocityUnlockReady: boolean; // true = player hit threshold & pressed button, awaiting Impact
+  velocityUnlockReady: boolean;
 
   // Misc tracking
   fastestPrestige: number;
@@ -123,11 +126,11 @@ export interface BuildingDef {
   name: string;
   emoji: string;
   desc: string;
-  tab: 'metals' | 'density' | 'velocity';
-  costResource: 'mass' | 'density' | 'velocity';
+  tab: 'metals' | 'velocity';
+  costResource: 'mass' | 'velocity';
   baseCost: number;
   costScale: number;
-  produces: { resource: 'mass' | 'density' | 'velocity' | 'energy'; baseAmount: number }[];
+  produces: { resource: 'mass' | 'velocity' | 'energy'; baseAmount: number }[];
 }
 
 // === ENERGY UPGRADE DEFINITIONS ===
@@ -174,19 +177,8 @@ export interface TabUnlockDef {
   desc: string;
   shardCost: number;
   requiresPrestige: number;
-  // Special unlock: velocity tab uses a resource threshold instead of shards
   velocityThreshold?: number;
   unlockViaImpact?: boolean;
-}
-
-// === CONVERTER DEFINITIONS ===
-export interface ConverterDef {
-  id: string;
-  from: 'mass' | 'density' | 'velocity';
-  to: 'mass' | 'density' | 'velocity';
-  name: string;
-  emoji: string;
-  rate: number;
 }
 
 // === PRESTIGE TIER DEFINITIONS ===
@@ -207,8 +199,8 @@ export interface CompositionDef {
   flavor: string;
   unlockTier: PrestigeTier;
   massMult: number;
-  densityMult: number;
   velocityMult: number;
   clickMult: number;
   cometMult: number;
+  expulsionMult: number; // bonus to mass→velocity conversion
 }

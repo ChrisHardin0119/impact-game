@@ -1,17 +1,8 @@
-import { GameState, ActiveComet } from './types';
-import { ALL_BUILDINGS, METALS, DENSITY_ITEMS, VELOCITY_ITEMS, getBuildingCount, getBuildingCost, DENSITY_RATIO, MASS_PER_DENSITY, getDensity, getEffectiveResource } from './buildings';
+import { GameState, ActiveComet, CompositionDef } from './types';
+import { ALL_BUILDINGS, METALS, VELOCITY_ITEMS, getBuildingCount, getBuildingCost, EXPULSION_COOLDOWN } from './buildings';
 import { getEnergyEffects } from './energyUpgrades';
 import { getAchievementEffects } from './achievements';
 import { getShardEffects } from './tabUnlocks';
-import { fmt } from './format';
-
-// ============================================================
-// DENSITY SYNC: density is always derived from mass
-// Call this after any mass change to keep them in sync.
-// ============================================================
-function syncDensity(state: GameState): GameState {
-  return { ...state, density: state.mass * DENSITY_RATIO };
-}
 
 // ============================================================
 // PRODUCTION CALCULATIONS
@@ -19,7 +10,6 @@ function syncDensity(state: GameState): GameState {
 
 export function getProduction(state: GameState): {
   massPerSec: number;
-  densityPerSec: number; // derived from massPerSec (for display)
   velocityPerSec: number;
   energyPerSec: number;
 } {
@@ -31,21 +21,12 @@ export function getProduction(state: GameState): {
   let velocityPS = 0;
   let energyPS = 0;
 
-  // Metal deposits produce mass (density comes from mass automatically)
+  // Metal deposits produce mass
   for (const def of METALS) {
     const count = getBuildingCount(state, def);
     if (count === 0) continue;
     for (const prod of def.produces) {
       if (prod.resource === 'mass') massPS += prod.baseAmount * count;
-    }
-  }
-
-  // Density items produce velocity
-  for (const def of DENSITY_ITEMS) {
-    const count = getBuildingCount(state, def);
-    if (count === 0) continue;
-    for (const prod of def.produces) {
-      if (prod.resource === 'velocity') velocityPS += prod.baseAmount * count;
     }
   }
 
@@ -60,12 +41,10 @@ export function getProduction(state: GameState): {
 
   // Apply energy upgrade multipliers
   massPS *= energyEff.massMult;
-  velocityPS *= energyEff.velocityMult;
   energyPS *= energyEff.energyMult;
 
   // Apply shard upgrade multipliers
   massPS *= shardEff.massMult;
-  velocityPS *= shardEff.velocityMult;
 
   // Apply achievement multipliers
   massPS *= achieveEff.massMult * achieveEff.allMult;
@@ -86,16 +65,7 @@ export function getProduction(state: GameState): {
     }
   }
 
-  // Density per second is just mass per second * ratio (same resource)
-  const densityPS = massPS * DENSITY_RATIO;
-
-  // Apply density-specific multipliers for display purposes
-  let densityDisplay = densityPS;
-  densityDisplay *= energyEff.densityMult;
-  densityDisplay *= shardEff.densityMult;
-  densityDisplay *= achieveEff.densityMult * achieveEff.allMult;
-
-  return { massPerSec: massPS, densityPerSec: densityDisplay, velocityPerSec: velocityPS, energyPerSec: energyPS };
+  return { massPerSec: massPS, velocityPerSec: velocityPS, energyPerSec: energyPS };
 }
 
 export function getMassPerSecond(state: GameState): number {
@@ -134,7 +104,7 @@ export function getClickValue(state: GameState, comboMult: number = 1): number {
 
 export function processClick(state: GameState, comboMult: number = 1): GameState {
   const clickValue = getClickValue(state, comboMult);
-  let s = {
+  return {
     ...state,
     mass: state.mass + clickValue,
     runMassEarned: state.runMassEarned + clickValue,
@@ -143,7 +113,6 @@ export function processClick(state: GameState, comboMult: number = 1): GameState
     lastClickTime: Date.now(),
     idleStreak: 0,
   };
-  return syncDensity(s); // density updates with mass
 }
 
 // ============================================================
@@ -198,20 +167,21 @@ export function spawnComet(state: GameState): GameState {
 export function catchComet(state: GameState, cometId: number): { state: GameState; value: number } {
   const comet = state.activeComets.find(c => c.id === cometId);
   if (!comet) return { state, value: 0 };
-  let s = {
-    ...state,
-    mass: state.mass + comet.value,
-    runMassEarned: state.runMassEarned + comet.value,
-    totalMassEarned: state.totalMassEarned + comet.value,
-    cometsCaught: state.cometsCaught + 1,
-    activeComets: state.activeComets.filter(c => c.id !== cometId),
+  return {
+    state: {
+      ...state,
+      mass: state.mass + comet.value,
+      runMassEarned: state.runMassEarned + comet.value,
+      totalMassEarned: state.totalMassEarned + comet.value,
+      cometsCaught: state.cometsCaught + 1,
+      activeComets: state.activeComets.filter(c => c.id !== cometId),
+    },
+    value: comet.value,
   };
-  return { state: syncDensity(s), value: comet.value };
 }
 
 // ============================================================
 // BUILDING PURCHASE
-// Density costs are converted to mass costs (same resource pool)
 // ============================================================
 
 export function purchaseBuilding(state: GameState, buildingId: string, count: number = 1): GameState | null {
@@ -224,8 +194,8 @@ export function purchaseBuilding(state: GameState, buildingId: string, count: nu
     totalCost += getBuildingCost(def, owned + i);
   }
 
-  // Check affordability (density costs check against derived density)
-  const available = getEffectiveResource(state, def.costResource);
+  // Check affordability
+  const available = def.costResource === 'mass' ? state.mass : state.velocity;
   if (available < totalCost) return null;
 
   let newState = { ...state };
@@ -233,39 +203,34 @@ export function purchaseBuilding(state: GameState, buildingId: string, count: nu
   // Deduct cost
   if (def.costResource === 'mass') {
     newState.mass -= totalCost;
-  } else if (def.costResource === 'density') {
-    // Spending density = spending mass (density * MASS_PER_DENSITY)
-    const massCost = totalCost * MASS_PER_DENSITY;
-    newState.mass -= massCost;
   } else {
     newState.velocity -= totalCost;
   }
 
-  // Clamp mass to 0
+  // Clamp
   newState.mass = Math.max(0, newState.mass);
+  newState.velocity = Math.max(0, newState.velocity);
 
   // Add building
   if (def.tab === 'metals') {
     newState.metals = { ...newState.metals, [def.id]: owned + count };
-  } else if (def.tab === 'density') {
-    newState.densityItems = { ...newState.densityItems, [def.id]: owned + count };
   } else {
     newState.velocityItems = { ...newState.velocityItems, [def.id]: owned + count };
   }
 
-  return syncDensity(newState); // sync density after mass change
+  return newState;
 }
 
 // ============================================================
 // AUTO-PURCHASE (energy upgrades)
 // ============================================================
 
-function autoPurchase(state: GameState, tab: 'metals' | 'density' | 'velocity'): GameState {
-  const buildings = tab === 'metals' ? METALS : tab === 'density' ? DENSITY_ITEMS : VELOCITY_ITEMS;
+function autoPurchase(state: GameState, tab: 'metals' | 'velocity'): GameState {
+  const buildings = tab === 'metals' ? METALS : VELOCITY_ITEMS;
   for (const def of buildings) {
     const owned = getBuildingCount(state, def);
     const cost = getBuildingCost(def, owned);
-    const available = getEffectiveResource(state, def.costResource);
+    const available = def.costResource === 'mass' ? state.mass : state.velocity;
     if (available >= cost) {
       const result = purchaseBuilding(state, def.id, 1);
       if (result) return result;
@@ -284,7 +249,6 @@ export function processTick(state: GameState, dt: number): GameState {
   // Production
   const prod = getProduction(s);
   s.mass += prod.massPerSec * dt;
-  // density auto-syncs (no separate density production)
   s.velocity += prod.velocityPerSec * dt;
   s.energy += prod.energyPerSec * dt;
 
@@ -299,9 +263,6 @@ export function processTick(state: GameState, dt: number): GameState {
   s.velocity = Math.max(0, s.velocity);
   s.energy = Math.max(0, s.energy);
 
-  // Sync density from mass
-  s = syncDensity(s);
-
   // Time tracking
   s.runTime += dt;
   s.totalPlayTime += dt;
@@ -309,6 +270,11 @@ export function processTick(state: GameState, dt: number): GameState {
   // Idle streak tracking
   if (Date.now() - s.lastClickTime > 1000) {
     s.idleStreak += dt;
+  }
+
+  // === EXPULSION COOLDOWN ===
+  if (s.expulsionCooldown > 0) {
+    s.expulsionCooldown = Math.max(0, s.expulsionCooldown - dt);
   }
 
   // === COMET SPAWNING (every 1-2 min) ===
@@ -337,7 +303,6 @@ export function processTick(state: GameState, dt: number): GameState {
   }
 
   // === AD BOOST TIMERS ===
-  // Shard ad (only after first prestige)
   if (s.totalPrestigeCount >= 1 && !s.shardAdAvailable) {
     s.nextShardAdIn -= dt;
     if (s.nextShardAdIn <= 0) {
@@ -345,7 +310,6 @@ export function processTick(state: GameState, dt: number): GameState {
     }
   }
 
-  // Velocity ad
   if (!s.velocityAdAvailable) {
     s.nextVelocityAdIn -= dt;
     if (s.nextVelocityAdIn <= 0) {
@@ -365,9 +329,6 @@ export function processTick(state: GameState, dt: number): GameState {
   if ((s.energyUpgrades['auto_mine'] || 0) >= 1) {
     s = autoPurchase(s, 'metals');
   }
-  if ((s.energyUpgrades['auto_compress'] || 0) >= 1 && s.unlockedTabs['density']) {
-    s = autoPurchase(s, 'density');
-  }
   if ((s.energyUpgrades['auto_accelerate'] || 0) >= 1 && s.unlockedTabs['velocity']) {
     s = autoPurchase(s, 'velocity');
   }
@@ -379,28 +340,21 @@ export function processTick(state: GameState, dt: number): GameState {
 // COMPOSITION HELPERS
 // ============================================================
 
-interface CompDef {
-  id: string; name: string; emoji: string; desc: string; flavor: string;
-  unlockTier: number;
-  massMult: number; densityMult: number; velocityMult: number;
-  clickMult: number; cometMult: number;
-}
-
-const COMPOSITIONS: CompDef[] = [
+const COMPOSITIONS: CompositionDef[] = [
   { id: 'rocky', name: 'Rocky', emoji: '🪨', desc: 'Balanced composition. Jack of all trades.', flavor: 'Solid silicate base.',
-    unlockTier: 0, massMult: 1.1, densityMult: 1.0, velocityMult: 1.0, clickMult: 1.0, cometMult: 1.0 },
+    unlockTier: 0, massMult: 1.1, velocityMult: 1.0, clickMult: 1.0, cometMult: 1.0, expulsionMult: 1.0 },
   { id: 'metallic', name: 'Metallic', emoji: '⚙️', desc: 'Heavy metals boost mass but slow velocity.', flavor: 'Iron-nickel core.',
-    unlockTier: 0, massMult: 1.2, densityMult: 1.1, velocityMult: 0.85, clickMult: 1.1, cometMult: 1.0 },
+    unlockTier: 0, massMult: 1.2, velocityMult: 0.85, clickMult: 1.1, cometMult: 1.0, expulsionMult: 0.9 },
   { id: 'ice', name: 'Ice', emoji: '🧊', desc: 'Volatile ices attract comets but reduce mass.', flavor: 'Frozen volatiles.',
-    unlockTier: 1, massMult: 0.9, densityMult: 0.9, velocityMult: 1.1, clickMult: 0.9, cometMult: 1.5 },
-  { id: 'carbonaceous', name: 'Carbonaceous', emoji: '⬛', desc: 'Carbon-rich. Boosts density and velocity.', flavor: 'Organic compounds.',
-    unlockTier: 1, massMult: 0.9, densityMult: 1.15, velocityMult: 1.15, clickMult: 0.95, cometMult: 1.0 },
+    unlockTier: 1, massMult: 0.9, velocityMult: 1.1, clickMult: 0.9, cometMult: 1.5, expulsionMult: 1.1 },
+  { id: 'carbonaceous', name: 'Carbonaceous', emoji: '⬛', desc: 'Carbon-rich. Boosts expulsion and velocity.', flavor: 'Organic compounds.',
+    unlockTier: 1, massMult: 0.9, velocityMult: 1.15, clickMult: 0.95, cometMult: 1.0, expulsionMult: 1.2 },
 ];
 
-export function getCompositionDef(id: string): CompDef | undefined {
+export function getCompositionDef(id: string): CompositionDef | undefined {
   return COMPOSITIONS.find(c => c.id === id);
 }
 
-export function getUnlockedCompositions(tier: number): CompDef[] {
+export function getUnlockedCompositions(tier: number): CompositionDef[] {
   return COMPOSITIONS.filter(c => c.unlockTier <= tier);
 }
