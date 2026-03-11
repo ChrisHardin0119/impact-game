@@ -488,6 +488,10 @@ body {
   user-select: none;
   -webkit-touch-callout: none;
 }
+.no-select input, .no-select textarea {
+  -webkit-user-select: text;
+  user-select: text;
+}
 
 /* Scrollable tab bar */
 .tab-bar {
