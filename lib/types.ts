@@ -120,6 +120,9 @@ export interface GameState {
   impatientStep: number;          // 0 = 30min available, 1 = 1hr available, 2 = 90min available, 3 = locked out
   impatientLockoutEndsAt: number; // timestamp when lockout ends (0 = not locked)
 
+  // Settings
+  spaceDustEnabled: boolean;
+
   // Dev mode
   devMode: boolean;
 

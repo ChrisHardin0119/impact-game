@@ -4,14 +4,14 @@ import { BuildingDef, GameState } from './types';
 // METAL DEPOSITS — spend mass, produce mass
 // ============================================================
 export const METALS: BuildingDef[] = [
-  { id: 'iron_fragments', name: 'Iron Fragments', emoji: '🪨', desc: 'Common iron-nickel fragments on the surface.', tab: 'metals', costResource: 'mass', baseCost: 15, costScale: 1.15, produces: [{ resource: 'mass', baseAmount: 0.5 }] },
-  { id: 'nickel_nodules', name: 'Nickel Nodules', emoji: '⚙️', desc: 'Dense nickel clusters embedded in regolith.', tab: 'metals', costResource: 'mass', baseCost: 200, costScale: 1.15, produces: [{ resource: 'mass', baseAmount: 3 }] },
-  { id: 'cobalt_seam', name: 'Cobalt Seam', emoji: '💙', desc: 'A vein of cobalt running through the core.', tab: 'metals', costResource: 'mass', baseCost: 3000, costScale: 1.15, produces: [{ resource: 'mass', baseAmount: 18 }] },
-  { id: 'platinum_vein', name: 'Platinum Vein', emoji: '✨', desc: 'Rare platinum deposits from ancient collisions.', tab: 'metals', costResource: 'mass', baseCost: 50000, costScale: 1.15, produces: [{ resource: 'mass', baseAmount: 100 }] },
+  { id: 'iron_fragments', name: 'Iron Fragments', emoji: '⛏️', desc: 'Common iron-nickel fragments on the surface.', tab: 'metals', costResource: 'mass', baseCost: 15, costScale: 1.15, produces: [{ resource: 'mass', baseAmount: 0.5 }] },
+  { id: 'nickel_nodules', name: 'Nickel Nodules', emoji: '🔩', desc: 'Dense nickel clusters embedded in regolith.', tab: 'metals', costResource: 'mass', baseCost: 200, costScale: 1.15, produces: [{ resource: 'mass', baseAmount: 3 }] },
+  { id: 'cobalt_seam', name: 'Cobalt Seam', emoji: '🔵', desc: 'A vein of cobalt running through the core.', tab: 'metals', costResource: 'mass', baseCost: 3000, costScale: 1.15, produces: [{ resource: 'mass', baseAmount: 18 }] },
+  { id: 'platinum_vein', name: 'Platinum Vein', emoji: '🪙', desc: 'Rare platinum deposits from ancient collisions.', tab: 'metals', costResource: 'mass', baseCost: 50000, costScale: 1.15, produces: [{ resource: 'mass', baseAmount: 100 }] },
   { id: 'iridium_pocket', name: 'Iridium Pocket', emoji: '💎', desc: 'Ultra-dense iridium trapped since formation.', tab: 'metals', costResource: 'mass', baseCost: 800000, costScale: 1.15, produces: [{ resource: 'mass', baseAmount: 550 }] },
-  { id: 'osmium_cluster', name: 'Osmium Cluster', emoji: '🔷', desc: 'The densest natural metal known to exist.', tab: 'metals', costResource: 'mass', baseCost: 15000000, costScale: 1.15, produces: [{ resource: 'mass', baseAmount: 3000 }] },
-  { id: 'palladium_layer', name: 'Palladium Layer', emoji: '🌟', desc: 'A deep palladium stratum from a primordial nebula.', tab: 'metals', costResource: 'mass', baseCost: 300000000, costScale: 1.15, produces: [{ resource: 'mass', baseAmount: 16000 }] },
-  { id: 'rhodium_core', name: 'Rhodium Core', emoji: '👑', desc: 'The rarest metal, found only at the deepest core.', tab: 'metals', costResource: 'mass', baseCost: 7000000000, costScale: 1.15, produces: [{ resource: 'mass', baseAmount: 85000 }] },
+  { id: 'osmium_cluster', name: 'Osmium Cluster', emoji: '🧊', desc: 'The densest natural metal known to exist.', tab: 'metals', costResource: 'mass', baseCost: 15000000, costScale: 1.15, produces: [{ resource: 'mass', baseAmount: 3000 }] },
+  { id: 'palladium_layer', name: 'Palladium Layer', emoji: '✦', desc: 'A deep palladium stratum from a primordial nebula.', tab: 'metals', costResource: 'mass', baseCost: 300000000, costScale: 1.15, produces: [{ resource: 'mass', baseAmount: 16000 }] },
+  { id: 'rhodium_core', name: 'Rhodium Core', emoji: '🏆', desc: 'The rarest metal, found only at the deepest core.', tab: 'metals', costResource: 'mass', baseCost: 7000000000, costScale: 1.15, produces: [{ resource: 'mass', baseAmount: 85000 }] },
 ];
 
 // ============================================================

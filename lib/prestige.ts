@@ -60,6 +60,7 @@ export function defaultGameState(): GameState {
     nextVelocityPopupIn: 1200 + Math.random() * 1200,
     impatientStep: 0,
     impatientLockoutEndsAt: 0,
+    spaceDustEnabled: true,
     devMode: false,
     tutorialCompleted: [],
     tutorialSkipped: false,
@@ -88,9 +89,9 @@ export function calcShards(runMassEarned: number, tier: PrestigeTier, bonusMult:
 export function getPrestigeResetState(state: GameState): GameState {
   const fresh = defaultGameState();
 
-  // If velocityUnlockReady was set, unlock the velocity tab on this Impact
+  // If velocityUnlockReady was set OR player has 50+ velocity, unlock the velocity tab on this Impact
   const newUnlockedTabs = { ...state.unlockedTabs };
-  if (state.velocityUnlockReady) {
+  if (state.velocityUnlockReady || (state.velocity >= 50 && state.totalPrestigeCount >= 1)) {
     newUnlockedTabs['velocity'] = true;
   }
 
@@ -115,6 +116,7 @@ export function getPrestigeResetState(state: GameState): GameState {
     velocityUnlockReady: false,
     fastestPrestige: state.fastestPrestige,
     maxComboReached: state.maxComboReached,
+    spaceDustEnabled: state.spaceDustEnabled,
     devMode: state.devMode,
     tutorialCompleted: state.tutorialCompleted,
     tutorialSkipped: state.tutorialSkipped,

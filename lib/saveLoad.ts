@@ -74,6 +74,7 @@ function migrateState(data: any): GameState {
     velocityUnlockReady: data.velocityUnlockReady || false,
     impatientStep: data.impatientStep || 0,
     impatientLockoutEndsAt: data.impatientLockoutEndsAt || 0,
+    spaceDustEnabled: data.spaceDustEnabled ?? true,
     version: 13.1,
   };
 

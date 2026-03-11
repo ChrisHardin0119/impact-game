@@ -87,6 +87,40 @@ export function getMassPerSecond(state: GameState): number {
   return getProduction(state).massPerSec;
 }
 
+// Get the effective production rate for a single building (with all multipliers)
+export function getBuildingProductionRate(state: GameState, buildingId: string): number {
+  const def = ALL_BUILDINGS.find(b => b.id === buildingId);
+  if (!def) return 0;
+  const count = getBuildingCount(state, def);
+  if (count === 0) return 0;
+
+  const energyEff = getEnergyEffects(state);
+  const achieveEff = getAchievementEffects(state);
+  const shardEff = getShardEffects(state.shardUpgrades);
+
+  let rate = def.produces[0].baseAmount * count;
+
+  // Apply multipliers based on resource type
+  if (def.produces[0].resource === 'mass') {
+    rate *= energyEff.massMult * shardEff.massMult * achieveEff.massMult * achieveEff.allMult;
+    if (state.activeBoosts.productionDouble.active && Date.now() < state.activeBoosts.productionDouble.endsAt) rate *= 2;
+    if (state.composition) {
+      const comp = getCompositionDef(state.composition);
+      if (comp) rate *= comp.massMult;
+    }
+  } else if (def.produces[0].resource === 'energy') {
+    rate *= energyEff.energyMult * achieveEff.energyMult * achieveEff.allMult;
+    if (state.activeBoosts.productionDouble.active && Date.now() < state.activeBoosts.productionDouble.endsAt) rate *= 2;
+  }
+
+  // Unspent shard bonus
+  if (state.currentShards > 0) {
+    rate *= 1 + state.currentShards * 0.001;
+  }
+
+  return rate;
+}
+
 // ============================================================
 // CLICK HANDLING
 // ============================================================
@@ -383,6 +417,11 @@ export function processTick(state: GameState, dt: number): GameState {
       ...s.activeBoosts,
       velocityDouble: { active: false, endsAt: 0 },
     };
+  }
+
+  // === AUTO-SET VELOCITY UNLOCK READY ===
+  if (!s.velocityUnlockReady && !s.unlockedTabs['velocity'] && s.totalPrestigeCount >= 1 && s.velocity >= 50) {
+    s.velocityUnlockReady = true;
   }
 
   // === IMPATIENT TAB LOCKOUT CHECK ===

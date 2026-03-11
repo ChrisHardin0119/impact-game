@@ -3,7 +3,7 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
 import { GameState, TabName, BuyMode, FloatingNumber, AchievementPopup } from '@/lib/types';
 import { defaultGameState, canPrestige, calcShards, getPrestigeResetState, PRESTIGE_TIERS } from '@/lib/prestige';
-import { processClick, getClickValue, getMassPerSecond, getProduction, catchComet, purchaseBuilding, getCompositionDef, getUnlockedCompositions } from '@/lib/gameEngine';
+import { processClick, getClickValue, getMassPerSecond, getProduction, getBuildingProductionRate, catchComet, purchaseBuilding, getCompositionDef, getUnlockedCompositions } from '@/lib/gameEngine';
 import { METALS, VELOCITY_ITEMS, getBuildingCost, getBuildingCount, getMaxAffordable, getTotalCostForN, getExpulsionRate, calculateExpulsion, getAccumulationRate, calculateAccumulation, EXPULSION_COOLDOWN, BASE_EXPULSION_RATE, BASE_ACCUMULATION_RATE } from '@/lib/buildings';
 import { ENERGY_UPGRADES, getEnergyUpgradeCost, canBuyEnergyUpgrade, getEnergyEffects } from '@/lib/energyUpgrades';
 import { ACHIEVEMENTS, getAchievementEffects } from '@/lib/achievements';
@@ -11,6 +11,51 @@ import { TAB_UNLOCKS, SHARD_UPGRADES, getShardUpgradeCost, isTabUnlocked, getSha
 import { fmt, fmtKg, fmtRate, fmtTime, fmtPercent } from '@/lib/format';
 import { saveGame, loadGame, calculateOfflineGains, hardReset, exportSave, importSave } from '@/lib/saveLoad';
 import { useGameLoop } from '@/hooks/useGameLoop';
+
+// Space dust floating particles background
+function SpaceDust() {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    let animId: number;
+    const particles: { x: number; y: number; size: number; speed: number; opacity: number; drift: number }[] = [];
+    const resize = () => { canvas.width = canvas.offsetWidth; canvas.height = canvas.offsetHeight; };
+    resize();
+    window.addEventListener('resize', resize);
+    // Spawn particles
+    for (let i = 0; i < 60; i++) {
+      particles.push({
+        x: Math.random() * canvas.width,
+        y: Math.random() * canvas.height,
+        size: 0.5 + Math.random() * 1.5,
+        speed: 0.1 + Math.random() * 0.4,
+        opacity: 0.15 + Math.random() * 0.35,
+        drift: (Math.random() - 0.5) * 0.3,
+      });
+    }
+    const animate = () => {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      for (const p of particles) {
+        p.y -= p.speed;
+        p.x += p.drift;
+        if (p.y < -5) { p.y = canvas.height + 5; p.x = Math.random() * canvas.width; }
+        if (p.x < -5) p.x = canvas.width + 5;
+        if (p.x > canvas.width + 5) p.x = -5;
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+        ctx.fillStyle = `rgba(180, 200, 255, ${p.opacity})`;
+        ctx.fill();
+      }
+      animId = requestAnimationFrame(animate);
+    };
+    animate();
+    return () => { cancelAnimationFrame(animId); window.removeEventListener('resize', resize); };
+  }, []);
+  return <canvas ref={canvasRef} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', pointerEvents: 'none', zIndex: 0 }} />;
+}
 
 export default function GamePage() {
   const [state, setStateRaw] = useState<GameState>(defaultGameState());
@@ -449,6 +494,9 @@ export default function GamePage() {
   return (
     <div className="game-shell scanlines bg-[var(--color-space)] text-[#e0e0ff] flex flex-col max-w-lg mx-auto relative overflow-hidden no-select safe-top safe-bottom">
 
+      {/* === SPACE DUST BACKGROUND === */}
+      {state.spaceDustEnabled && <SpaceDust />}
+
       {/* === FLOATING CLICK NUMBERS (fixed, over everything) === */}
       {floatingNums.map(f => (
         <div key={f.id} className="fixed pointer-events-none float-up glow-cyan"
@@ -772,6 +820,7 @@ export default function GamePage() {
               const count = state.buyMode === 'max' ? Math.max(1, getMaxAffordable(def, owned, state.mass)) : (state.buyMode as number);
               const cost = getTotalCostForN(def, owned, count);
               const canAfford = state.mass >= cost;
+              const currentRate = getBuildingProductionRate(state, def.id);
               return (
                 <button key={def.id} onClick={() => handleBuy(def.id)} disabled={!canAfford}
                   className={`card w-full text-left transition-colors cursor-pointer ${canAfford ? 'hover:border-[var(--color-neon)]' : 'opacity-40'}`}>
@@ -781,10 +830,12 @@ export default function GamePage() {
                       <div>
                         <div className="text-sm font-bold">{def.name} <span className="text-[var(--color-gray-500)] font-normal text-xs">({owned})</span></div>
                         <div className="text-[var(--color-gray-400)] text-xs">{def.desc}</div>
+                        {owned > 0 && <div className="text-[10px] mass-per-sec">Producing: {fmtRate(currentRate)}/s</div>}
                       </div>
                     </div>
                     <div className="text-right">
                       <div className={`text-xs font-bold ${canAfford ? 'text-[var(--color-green)]' : 'text-[var(--color-red)]'}`}>{fmtKg(cost)}</div>
+                      {state.buyMode === 'max' && <div className="text-[var(--color-neon)] text-[10px] font-bold">Buy {count}</div>}
                       <div className="text-[var(--color-gray-500)] text-[10px]">+{fmtRate(def.produces[0].baseAmount * count)} mass</div>
                     </div>
                   </div>
@@ -876,6 +927,7 @@ export default function GamePage() {
               const count = state.buyMode === 'max' ? Math.max(1, getMaxAffordable(def, owned, state.velocity)) : (state.buyMode as number);
               const cost = getTotalCostForN(def, owned, count);
               const canAfford = state.velocity >= cost;
+              const currentRate = getBuildingProductionRate(state, def.id);
               return (
                 <button key={def.id} onClick={() => handleBuy(def.id)} disabled={!canAfford}
                   className={`card w-full text-left transition-colors cursor-pointer ${canAfford ? 'hover:border-[var(--color-neon)]' : 'opacity-40'}`}>
@@ -885,10 +937,12 @@ export default function GamePage() {
                       <div>
                         <div className="text-sm font-bold">{def.name} <span className="text-[var(--color-gray-500)] font-normal text-xs">({owned})</span></div>
                         <div className="text-[var(--color-gray-400)] text-xs">{def.desc}</div>
+                        {owned > 0 && <div className="text-[10px] mass-per-sec">Producing: {fmtRate(currentRate)}/s</div>}
                       </div>
                     </div>
                     <div className="text-right">
                       <div className={`text-xs font-bold ${canAfford ? 'text-[var(--color-green)]' : 'text-[var(--color-red)]'}`}>{fmt(cost)} m/s</div>
+                      {state.buyMode === 'max' && <div className="text-[var(--color-neon)] text-[10px] font-bold">Buy {count}</div>}
                       <div className="text-[var(--color-gray-500)] text-[10px]">+{fmtRate(def.produces[0].baseAmount * count)} energy</div>
                     </div>
                   </div>
@@ -1080,6 +1134,16 @@ export default function GamePage() {
               <div className="stat-row"><span className="text-[var(--color-gray-400)]">Run Time</span><span>{fmtTime(state.runTime)}</span></div>
               {state.fastestPrestige < Infinity && <div className="stat-row"><span className="text-[var(--color-gray-400)]">Fastest Impact</span><span>{fmtTime(state.fastestPrestige)}</span></div>}
               <div className="stat-row"><span className="text-[var(--color-gray-400)]">Best Combo</span><span>x{state.maxComboReached}</span></div>
+            </div>
+            <div className="card mt-4">
+              <div className="section-header"><span className="text-sm">⚙️</span><span className="font-bold text-sm">Settings</span></div>
+              <div className="flex items-center justify-between mt-2">
+                <span className="text-sm text-[var(--color-gray-400)]">Space Dust Animation</span>
+                <button onClick={() => setState({ ...state, spaceDustEnabled: !state.spaceDustEnabled })}
+                  className={`text-xs px-3 py-1 rounded ${state.spaceDustEnabled ? 'btn-primary' : 'btn-secondary'}`}>
+                  {state.spaceDustEnabled ? 'ON' : 'OFF'}
+                </button>
+              </div>
             </div>
             <div className="space-y-2 mt-4">
               <button onClick={() => saveGame(stateRef.current)} className="btn-secondary w-full">💾 Save Now</button>
