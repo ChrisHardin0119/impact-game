@@ -494,10 +494,37 @@ body {
   display: flex;
   overflow-x: auto;
   -webkit-overflow-scrolling: touch;
-  scrollbar-width: none;
-  -ms-overflow-style: none;
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-neon) transparent;
 }
-.tab-bar::-webkit-scrollbar { display: none; }
+.tab-bar::-webkit-scrollbar { height: 4px; }
+.tab-bar::-webkit-scrollbar-track { background: transparent; }
+.tab-bar::-webkit-scrollbar-thumb { background: var(--color-neon); border-radius: 2px; }
+/* Hide scrollbar on touch devices only */
+@media (hover: none) and (pointer: coarse) {
+  .tab-bar { scrollbar-width: none; -ms-overflow-style: none; }
+  .tab-bar::-webkit-scrollbar { display: none; }
+}
+
+/* Tab arrow buttons for PC */
+.tab-arrow {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  min-width: 28px;
+  background: rgba(10,10,26,0.95);
+  color: var(--color-neon);
+  border: none;
+  cursor: pointer;
+  font-size: 1.1rem;
+  z-index: 2;
+  transition: background 0.15s;
+}
+.tab-arrow:hover { background: rgba(0,255,255,0.1); }
+@media (hover: hover) and (pointer: fine) {
+  .tab-arrow { display: flex; }
+}
 
 /* Mass per second indicator */
 .mass-per-sec {

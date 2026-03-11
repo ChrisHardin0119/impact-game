@@ -562,25 +562,29 @@ export default function GamePage() {
       )}
 
       {/* === TAB BAR === */}
-      <div className="tab-bar border-b border-[var(--color-gray-700)]" style={{ background: 'rgba(10,10,26,0.8)' }}>
-        {allTabs.map(tab => {
-          const unlocked = isTabUnlocked(tab.id, state.unlockedTabs);
-          const active = state.activeTab === tab.id;
-          return (
-            <button key={tab.id} id={`tab-${tab.id}`}
-              onClick={() => handleTabSwitch(tab.id)}
-              className={`tab ${active ? 'tab-active' : ''} ${!unlocked ? 'opacity-30 cursor-not-allowed' : ''}`}
-              disabled={!unlocked && tab.id !== 'dev'}>
-              {tab.emoji} {tab.label}
-              {!unlocked && tab.id !== 'impact' && tab.id !== 'achievements' && tab.id !== 'stats' && ' 🔒'}
-            </button>
-          );
-        })}
-        {state.devMode && (
-          <button id="tab-dev" onClick={() => handleTabSwitch('dev')}
-            className={`tab ${state.activeTab === 'dev' ? 'tab-active' : ''}`}
-            style={{ color: 'var(--color-red)' }}>🔧 Dev</button>
-        )}
+      <div className="flex border-b border-[var(--color-gray-700)]" style={{ background: 'rgba(10,10,26,0.8)' }}>
+        <button className="tab-arrow" onClick={() => { const el = document.getElementById('tab-scroll'); if (el) el.scrollBy({ left: -120, behavior: 'smooth' }); }}>◀</button>
+        <div id="tab-scroll" className="tab-bar flex-1">
+          {allTabs.map(tab => {
+            const unlocked = isTabUnlocked(tab.id, state.unlockedTabs);
+            const active = state.activeTab === tab.id;
+            return (
+              <button key={tab.id} id={`tab-${tab.id}`}
+                onClick={() => handleTabSwitch(tab.id)}
+                className={`tab ${active ? 'tab-active' : ''} ${!unlocked ? 'opacity-30 cursor-not-allowed' : ''}`}
+                disabled={!unlocked && tab.id !== 'dev'}>
+                {tab.emoji} {tab.label}
+                {!unlocked && tab.id !== 'impact' && tab.id !== 'achievements' && tab.id !== 'stats' && ' 🔒'}
+              </button>
+            );
+          })}
+          {state.devMode && (
+            <button id="tab-dev" onClick={() => handleTabSwitch('dev')}
+              className={`tab ${state.activeTab === 'dev' ? 'tab-active' : ''}`}
+              style={{ color: 'var(--color-red)' }}>🔧 Dev</button>
+          )}
+        </div>
+        <button className="tab-arrow" onClick={() => { const el = document.getElementById('tab-scroll'); if (el) el.scrollBy({ left: 120, behavior: 'smooth' }); }}>▶</button>
       </div>
 
       {/* === MAIN CONTENT === */}
