@@ -72,6 +72,14 @@ export function getProduction(state: GameState): {
     }
   }
 
+  // Unspent shard bonus: +0.1% overall production per unspent shard
+  if (state.currentShards > 0) {
+    const shardBonus = 1 + state.currentShards * 0.001;
+    massPS *= shardBonus;
+    velocityPS *= shardBonus;
+    energyPS *= shardBonus;
+  }
+
   return { massPerSec: massPS, velocityPerSec: velocityPS, energyPerSec: energyPS };
 }
 
@@ -377,6 +385,12 @@ export function processTick(state: GameState, dt: number): GameState {
     };
   }
 
+  // === IMPATIENT TAB LOCKOUT CHECK ===
+  if (s.impatientStep === 3 && s.impatientLockoutEndsAt > 0 && Date.now() >= s.impatientLockoutEndsAt) {
+    s.impatientStep = 0;
+    s.impatientLockoutEndsAt = 0;
+  }
+
   // === AUTO-PURCHASE (if energy toggles are bought) ===
   if ((s.energyUpgrades['auto_mine'] || 0) >= 1) {
     s = autoPurchase(s, 'metals');
@@ -393,14 +407,18 @@ export function processTick(state: GameState, dt: number): GameState {
 // ============================================================
 
 const COMPOSITIONS: CompositionDef[] = [
-  { id: 'rocky', name: 'Rocky', emoji: '🪨', desc: 'Balanced composition. Jack of all trades.', flavor: 'Solid silicate base.',
-    unlockTier: 0, massMult: 1.1, velocityMult: 1.0, clickMult: 1.0, cometMult: 1.0, expulsionMult: 1.0 },
-  { id: 'metallic', name: 'Metallic', emoji: '⚙️', desc: 'Heavy metals boost mass but slow velocity.', flavor: 'Iron-nickel core.',
-    unlockTier: 0, massMult: 1.2, velocityMult: 0.85, clickMult: 1.1, cometMult: 1.0, expulsionMult: 0.9 },
-  { id: 'ice', name: 'Ice', emoji: '🧊', desc: 'Volatile ices attract comets but reduce mass.', flavor: 'Frozen volatiles.',
-    unlockTier: 1, massMult: 0.9, velocityMult: 1.1, clickMult: 0.9, cometMult: 1.5, expulsionMult: 1.1 },
-  { id: 'carbonaceous', name: 'Carbonaceous', emoji: '⬛', desc: 'Carbon-rich. Boosts expulsion and velocity.', flavor: 'Organic compounds.',
-    unlockTier: 1, massMult: 0.9, velocityMult: 1.15, clickMult: 0.95, cometMult: 1.0, expulsionMult: 1.2 },
+  { id: 'iron', name: 'Iron', emoji: '⚙️', desc: '+25% mass, +10% click. -15% velocity, -10% expulsion.', flavor: 'Dense iron-nickel core. Heavy but powerful.',
+    unlockTier: 0, massMult: 1.25, velocityMult: 0.85, clickMult: 1.1, cometMult: 1.0, expulsionMult: 0.9 },
+  { id: 'silicon', name: 'Silicon', emoji: '🪨', desc: '+15% mass, +15% energy. -10% click, -10% comets.', flavor: 'Crystalline silicate matrix.',
+    unlockTier: 0, massMult: 1.15, velocityMult: 1.0, clickMult: 0.9, cometMult: 0.9, expulsionMult: 1.0 },
+  { id: 'hydrogen', name: 'Hydrogen', emoji: '💨', desc: '+30% velocity, +20% expulsion. -20% mass, -15% click.', flavor: 'Lightest element. Pure speed.',
+    unlockTier: 0, massMult: 0.8, velocityMult: 1.3, clickMult: 0.85, cometMult: 1.0, expulsionMult: 1.2 },
+  { id: 'carbon', name: 'Carbon', emoji: '⬛', desc: '+20% click, +25% expulsion. -15% mass, -10% comets.', flavor: 'Carbon nanostructures. Explosive potential.',
+    unlockTier: 0, massMult: 0.85, velocityMult: 1.0, clickMult: 1.2, cometMult: 0.9, expulsionMult: 1.25 },
+  { id: 'helium', name: 'Helium', emoji: '🫧', desc: '+50% comets, +10% velocity. -20% click, -10% mass.', flavor: 'Noble gas. Attracts cosmic debris.',
+    unlockTier: 0, massMult: 0.9, velocityMult: 1.1, clickMult: 0.8, cometMult: 1.5, expulsionMult: 1.0 },
+  { id: 'uranium', name: 'Uranium', emoji: '☢️', desc: '+20% mass, +20% velocity. -30% comets, -15% expulsion.', flavor: 'Radioactive powerhouse. Raw output.',
+    unlockTier: 0, massMult: 1.2, velocityMult: 1.2, clickMult: 1.0, cometMult: 0.7, expulsionMult: 0.85 },
 ];
 
 export function getCompositionDef(id: string): CompositionDef | undefined {

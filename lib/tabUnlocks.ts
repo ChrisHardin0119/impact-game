@@ -37,7 +37,7 @@ export function getTabUnlockDef(tabId: TabName): TabUnlockDef | undefined {
 
 export function isTabUnlocked(tabId: TabName, unlockedTabs: Record<string, boolean>): boolean {
   // Always-available tabs
-  if (tabId === 'metals' || tabId === 'impact' || tabId === 'achievements' || tabId === 'stats' || tabId === 'dev') return true;
+  if (tabId === 'metals' || tabId === 'impact' || tabId === 'achievements' || tabId === 'stats' || tabId === 'impatient' || tabId === 'dev') return true;
   return unlockedTabs[tabId] || false;
 }
 

@@ -72,6 +72,8 @@ function migrateState(data: any): GameState {
     idleStreak: data.idleStreak || 0,
     lastClickTime: data.lastClickTime || 0,
     velocityUnlockReady: data.velocityUnlockReady || false,
+    impatientStep: data.impatientStep || 0,
+    impatientLockoutEndsAt: data.impatientLockoutEndsAt || 0,
     version: 13.1,
   };
 

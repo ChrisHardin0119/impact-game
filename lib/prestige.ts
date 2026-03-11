@@ -58,6 +58,8 @@ export function defaultGameState(): GameState {
     velocityPopupAvailable: false,
     velocityPopupExpiresIn: 0,
     nextVelocityPopupIn: 1200 + Math.random() * 1200,
+    impatientStep: 0,
+    impatientLockoutEndsAt: 0,
     devMode: false,
     tutorialCompleted: [],
     tutorialSkipped: false,
@@ -117,6 +119,9 @@ export function getPrestigeResetState(state: GameState): GameState {
     tutorialCompleted: state.tutorialCompleted,
     tutorialSkipped: state.tutorialSkipped,
     adsRemoved: state.adsRemoved,
+    // Preserve impatient tab state across impact
+    impatientStep: state.impatientStep,
+    impatientLockoutEndsAt: state.impatientLockoutEndsAt,
     // Preserve active boosts across impact
     activeBoosts: state.activeBoosts,
     // Floating ads: keep production/mass drop state, reset shard double (used on impact)

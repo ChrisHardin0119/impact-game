@@ -4,7 +4,7 @@
 // Three resources: Mass, Velocity, Energy
 // ============================================================
 
-export type TabName = 'metals' | 'expulsion' | 'velocity' | 'energy' | 'impact' | 'achievements' | 'stats' | 'dev';
+export type TabName = 'metals' | 'expulsion' | 'velocity' | 'energy' | 'impact' | 'achievements' | 'stats' | 'impatient' | 'dev';
 export type BuyMode = 1 | 10 | 100 | 'max';
 export type PrestigeTier = 0 | 1 | 2 | 3 | 4 | 5;
 
@@ -115,6 +115,10 @@ export interface GameState {
   velocityPopupAvailable: boolean;
   velocityPopupExpiresIn: number;
   nextVelocityPopupIn: number;
+
+  // Impatient tab — 3 tiered ads: 30min, 1hr, 90min then 90min lockout
+  impatientStep: number;          // 0 = 30min available, 1 = 1hr available, 2 = 90min available, 3 = locked out
+  impatientLockoutEndsAt: number; // timestamp when lockout ends (0 = not locked)
 
   // Dev mode
   devMode: boolean;

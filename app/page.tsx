@@ -358,6 +358,30 @@ export default function GamePage() {
     setAdPopup(null);
   }, [setState]);
 
+  // IMPATIENT TAB: tiered ad rewards
+  const handleImpatientAd = useCallback(() => {
+    const s = stateRef.current;
+    if (s.impatientStep >= 3) return; // locked out
+    const prod = getProduction(s);
+    const minutesMap = [30, 60, 90]; // step 0=30min, step 1=60min, step 2=90min
+    const minutes = minutesMap[s.impatientStep];
+    const massDrop = prod.massPerSec * minutes * 60;
+    const velDrop = prod.velocityPerSec * minutes * 60;
+    const energyDrop = prod.energyPerSec * minutes * 60;
+    const nextStep = s.impatientStep + 1;
+    const isLockout = nextStep >= 3;
+    setState({
+      ...s,
+      mass: s.mass + massDrop,
+      velocity: s.velocity + velDrop,
+      energy: s.energy + energyDrop,
+      runMassEarned: s.runMassEarned + massDrop,
+      totalMassEarned: s.totalMassEarned + massDrop,
+      impatientStep: isLockout ? 3 : nextStep,
+      impatientLockoutEndsAt: isLockout ? Date.now() + 90 * 60 * 1000 : 0,
+    });
+  }, [setState]);
+
   const handleDevPasscode = useCallback(() => {
     if (devPasscode === '89116282') { setState({ ...stateRef.current, devMode: true }); setDevPasscode(''); }
   }, [devPasscode, setState]);
@@ -400,6 +424,9 @@ export default function GamePage() {
   const effectiveAccRate = accRate * achieveEffE.accumulationMult;
   const massFromAccumulation = accumulationAmount * effectiveAccRate;
 
+  // Unspent shard bonus display
+  const shardBonusPercent = state.currentShards * 0.1;
+
   const allTabs: { id: TabName; label: string; emoji: string }[] = [
     { id: 'metals', label: 'Metals', emoji: '🪨' },
     { id: 'expulsion', label: 'Expulsion', emoji: '💨' },
@@ -408,6 +435,7 @@ export default function GamePage() {
     { id: 'impact', label: 'Impact', emoji: '💥' },
     { id: 'achievements', label: 'Awards', emoji: '🏆' },
     { id: 'stats', label: 'Stats', emoji: '📊' },
+    { id: 'impatient', label: 'Impatient', emoji: '⏩' },
   ];
 
   if (!loaded) {
@@ -713,7 +741,7 @@ export default function GamePage() {
                 className={`tab ${active ? 'tab-active' : ''} ${!unlocked ? 'opacity-30 cursor-not-allowed' : ''}`}
                 disabled={!unlocked && tab.id !== 'dev'}>
                 {tab.emoji} {tab.label}
-                {!unlocked && tab.id !== 'impact' && tab.id !== 'achievements' && tab.id !== 'stats' && ' 🔒'}
+                {!unlocked && tab.id !== 'impact' && tab.id !== 'achievements' && tab.id !== 'stats' && tab.id !== 'impatient' && ' 🔒'}
               </button>
             );
           })}
@@ -910,6 +938,11 @@ export default function GamePage() {
             <div className="card box-glow-purple text-center mb-3" style={{ borderColor: 'var(--color-orange)' }}>
               <div className="text-2xl font-bold glow-orange mb-1">💎 {fmt(state.currentShards)}</div>
               <div className="text-[var(--color-gray-400)] text-xs">Lifetime: {fmt(state.lifetimeShards)} shards</div>
+              {state.currentShards > 0 && (
+                <div className="text-xs mt-1" style={{ color: 'var(--color-green)' }}>
+                  Unspent bonus: +{shardBonusPercent.toFixed(1)}% all production
+                </div>
+              )}
             </div>
             {/* Explain what Impact/Shards are before first impact */}
             {state.totalPrestigeCount === 0 && (
@@ -1079,6 +1112,82 @@ export default function GamePage() {
                 </div>
               )}
             </div>
+          </>
+        )}
+
+        {/* ===================== IMPATIENT TAB ===================== */}
+        {state.activeTab === 'impatient' && (
+          <>
+            <div className="text-center mb-3">
+              <div className="text-3xl mb-1">⏩</div>
+              <div className="text-lg font-bold gradient-text">Impatient</div>
+              <div className="text-[var(--color-gray-400)] text-xs">Can&apos;t wait? Skip ahead with ads.</div>
+            </div>
+            {state.currentShards > 0 && (
+              <div className="card mb-3 text-center text-xs" style={{ borderColor: 'var(--color-green)' }}>
+                <span style={{ color: 'var(--color-green)' }}>💎 Unspent Shard Bonus: +{shardBonusPercent.toFixed(1)}% all production</span>
+                <div className="text-[var(--color-gray-500)] mt-1">({fmt(state.currentShards)} shards × 0.1% each — consider saving!)</div>
+              </div>
+            )}
+            {(() => {
+              const isLockedOut = state.impatientStep >= 3;
+              const lockoutRemaining = isLockedOut ? Math.max(0, (state.impatientLockoutEndsAt - Date.now()) / 1000) : 0;
+              const steps = [
+                { label: '30 Minutes', minutes: 30, emoji: '⏱️', desc: 'Get 30 min of current production instantly.' },
+                { label: '1 Hour', minutes: 60, emoji: '⏰', desc: 'Get 1 hour of current production instantly.' },
+                { label: '90 Minutes', minutes: 90, emoji: '🕐', desc: 'Get 90 min of current production instantly.' },
+              ];
+              return (
+                <div className="space-y-3">
+                  {steps.map((step, i) => {
+                    const isCurrentStep = state.impatientStep === i;
+                    const isDone = state.impatientStep > i && !isLockedOut;
+                    const isLocked = i > state.impatientStep || isLockedOut;
+                    const massDrop = prod.massPerSec * step.minutes * 60;
+                    const velDrop = prod.velocityPerSec * step.minutes * 60;
+                    const energyDrop = prod.energyPerSec * step.minutes * 60;
+                    return (
+                      <div key={i} className={`card ${isCurrentStep ? 'box-glow-cyan' : isDone ? 'opacity-40' : isLocked ? 'opacity-30' : ''}`}
+                        style={isCurrentStep ? { borderColor: 'var(--color-neon)' } : {}}>
+                        <div className="flex items-center justify-between mb-2">
+                          <div className="flex items-center gap-2">
+                            <span className="text-xl">{step.emoji}</span>
+                            <div>
+                              <div className="text-sm font-bold">{step.label} {isDone && '✅'}</div>
+                              <div className="text-[var(--color-gray-400)] text-xs">{step.desc}</div>
+                            </div>
+                          </div>
+                          {isDone && <span className="badge badge-green">Claimed</span>}
+                          {isLocked && !isDone && !isLockedOut && <span className="text-[var(--color-gray-500)] text-xs">🔒 Claim previous first</span>}
+                        </div>
+                        {isCurrentStep && (
+                          <div>
+                            <div className="text-xs text-[var(--color-gray-400)] mb-2" style={{ lineHeight: '1.6' }}>
+                              {massDrop > 0 && <span>+{fmtKg(massDrop)} mass </span>}
+                              {velDrop > 0 && <span>+{fmt(velDrop)} vel </span>}
+                              {energyDrop > 0 && <span>+{fmt(energyDrop)} energy</span>}
+                            </div>
+                            <button onClick={handleImpatientAd} className="btn-primary w-full">
+                              {state.adsRemoved ? '⏩ Collect!' : '📺 Watch Ad'}
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                  {isLockedOut && (
+                    <div className="card text-center" style={{ borderColor: 'var(--color-red)' }}>
+                      <div className="text-lg mb-1">🔒</div>
+                      <div className="text-sm font-bold" style={{ color: 'var(--color-red)' }}>Locked — Cooldown Active</div>
+                      <div className="text-[var(--color-gray-400)] text-xs mt-1">Resets in {fmtTime(lockoutRemaining)}</div>
+                      <div className="resource-bar mt-2" style={{ height: '6px' }}>
+                        <div className="resource-bar-fill" style={{ width: `${Math.max(0, 100 - (lockoutRemaining / (90 * 60)) * 100)}%`, background: 'var(--color-red)' }} />
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
           </>
         )}
 
