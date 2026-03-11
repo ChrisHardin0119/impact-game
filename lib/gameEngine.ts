@@ -363,9 +363,37 @@ export function processTick(state: GameState, dt: number): GameState {
   if (newState.composition === 'ice') {
     newState.nextCometIn -= dt;
     if (newState.nextCometIn <= 0) {
-      const { state: stateAfterComet } = spawnComet(newState);
-      newState = stateAfterComet;
+      newState = spawnVisualComet(newState);
     }
+  }
+
+  // Update active comets — drift and expire
+  if (newState.activeComets && newState.activeComets.length > 0) {
+    const autoCaptureLevel = newState.coreUpgrades['comet_magnet'] || 0;
+    const autoCaptureChance = autoCaptureLevel * 0.2; // 20% per level, max 100% at level 5
+    let updatedComets: typeof newState.activeComets = [];
+    for (const comet of newState.activeComets) {
+      const updated = { ...comet, timeLeft: comet.timeLeft - dt };
+      // Drift the comet
+      updated.x += Math.cos(updated.angle) * updated.speed * dt;
+      updated.y += Math.sin(updated.angle) * updated.speed * dt;
+      // Bounce off edges
+      if (updated.x < 5 || updated.x > 95) updated.angle = Math.PI - updated.angle;
+      if (updated.y < 5 || updated.y > 85) updated.angle = -updated.angle;
+      updated.x = Math.max(5, Math.min(95, updated.x));
+      updated.y = Math.max(5, Math.min(85, updated.y));
+
+      if (updated.timeLeft <= 0) {
+        // Expired — auto-capture check
+        if (autoCaptureChance > 0 && Math.random() < autoCaptureChance) {
+          newState = { ...newState, mass: newState.mass + updated.value, cometsCaught: newState.cometsCaught + 1 };
+        }
+        // else comet is lost
+      } else {
+        updatedComets.push(updated);
+      }
+    }
+    newState.activeComets = updatedComets;
   }
 
   // Handle charge cooldown for Carbonaceous
@@ -491,9 +519,9 @@ export function buyProcess(
 }
 
 /**
- * Spawns a comet event.
+ * Calculate comet value based on current state.
  */
-export function spawnComet(state: GameState): { state: GameState; value: number } {
+export function getCometValue(state: GameState): number {
   let value = (state.mass + state.gravity * 100 + state.density * 1000) * 0.05;
 
   if (state.composition === 'ice') {
@@ -510,23 +538,76 @@ export function spawnComet(state: GameState): { state: GameState; value: number 
     value *= 2;
   }
 
+  return value;
+}
+
+/**
+ * Get next comet interval based on state.
+ */
+function getNextCometInterval(state: GameState): number {
+  if (state.composition === 'ice') {
+    let cometInterval = 3 + Math.random() * 5;
+    if (state.discoveries.includes('ice_comets')) {
+      cometInterval *= 0.67;
+    }
+    return cometInterval;
+  }
+  return 15 + Math.random() * 15;
+}
+
+/**
+ * Spawns a visual comet on screen (does NOT auto-grant mass).
+ */
+export function spawnVisualComet(state: GameState): GameState {
+  const value = getCometValue(state);
+  const newComet = {
+    id: Date.now() + Math.random(),
+    value,
+    x: 10 + Math.random() * 80, // 10-90% horizontal
+    y: 10 + Math.random() * 60, // 10-70% vertical
+    timeLeft: 5, // 5 seconds to tap
+    speed: 3 + Math.random() * 4, // drift speed
+    angle: Math.random() * Math.PI * 2, // random direction
+  };
+
+  return {
+    ...state,
+    activeComets: [...(state.activeComets || []), newComet],
+    nextCometIn: getNextCometInterval(state),
+  };
+}
+
+/**
+ * Catch (tap) a comet — grants its mass value.
+ */
+export function catchComet(state: GameState, cometId: number): { state: GameState; value: number } {
+  const comet = (state.activeComets || []).find(c => c.id === cometId);
+  if (!comet) return { state, value: 0 };
+
+  return {
+    state: {
+      ...state,
+      mass: state.mass + comet.value,
+      cometsCaught: state.cometsCaught + 1,
+      activeComets: (state.activeComets || []).filter(c => c.id !== cometId),
+    },
+    value: comet.value,
+  };
+}
+
+/**
+ * Legacy spawnComet — used for offline gains calculation.
+ * Instantly grants mass (for offline auto-capture).
+ */
+export function spawnComet(state: GameState): { state: GameState; value: number } {
+  const value = getCometValue(state);
+
   let newState = {
     ...state,
     mass: state.mass + value,
     cometsCaught: state.cometsCaught + 1,
+    nextCometIn: getNextCometInterval(state),
   };
-
-  // Base comet timing
-  if (state.composition === 'ice') {
-    let cometInterval = 3 + Math.random() * 5;
-    // Frozen Fortune: +50% comet spawn rate (shorter intervals) as Ice
-    if (state.discoveries.includes('ice_comets')) {
-      cometInterval *= 0.67;
-    }
-    newState.nextCometIn = cometInterval;
-  } else {
-    newState.nextCometIn = 15 + Math.random() * 15;
-  }
 
   return { state: newState, value };
 }

@@ -234,6 +234,59 @@ body {
   border-radius: 4px;
 }
 
+/* Comet buttons — tappable floating comets */
+.comet-button {
+  position: fixed;
+  z-index: 45;
+  transform: translate(-50%, -50%);
+  cursor: pointer;
+  border: none;
+  background: none;
+  padding: 0;
+  touch-action: manipulation;
+  animation: cometAppear 0.3s ease-out;
+}
+.comet-inner {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  background: radial-gradient(ellipse at center, rgba(255,140,0,0.25), rgba(255,60,0,0.1), transparent 70%);
+  border: 2px solid rgba(255,140,0,0.6);
+  border-radius: 50%;
+  width: 64px;
+  height: 64px;
+  justify-content: center;
+  box-shadow: 0 0 20px rgba(255,140,0,0.4), 0 0 40px rgba(255,60,0,0.2), inset 0 0 12px rgba(255,140,0,0.15);
+  transition: transform 0.1s;
+}
+.comet-button:active .comet-inner {
+  transform: scale(0.85);
+}
+.comet-emoji {
+  font-size: 1.4rem;
+  line-height: 1;
+  filter: drop-shadow(0 0 6px rgba(255,140,0,0.8));
+}
+.comet-value {
+  font-size: 0.55rem;
+  color: var(--color-orange);
+  font-weight: bold;
+  text-shadow: 0 0 4px rgba(255,140,0,0.6);
+  white-space: nowrap;
+}
+.comet-timer {
+  height: 3px;
+  background: linear-gradient(90deg, var(--color-orange), var(--color-yellow));
+  border-radius: 2px;
+  margin-top: 4px;
+  transition: width 0.1s linear;
+}
+@keyframes cometAppear {
+  0% { opacity: 0; transform: translate(-50%, -50%) scale(0.3); }
+  100% { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+}
+
 /* Floating number animation */
 @keyframes floatUp {
   0% { opacity: 1; transform: translateY(0) scale(1); }

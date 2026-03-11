@@ -3,7 +3,7 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
 import { GameState, TabName, BuyMode, FloatingNumber } from '@/lib/types';
 import { defaultGameState } from '@/lib/prestige';
-import { processClick, buyProcess, activateOrbitalMechanic, getMassPerSecond, getClickValue } from '@/lib/gameEngine';
+import { processClick, buyProcess, activateOrbitalMechanic, getMassPerSecond, getClickValue, catchComet } from '@/lib/gameEngine';
 import { getProcessCost, getMaxAffordable, PROCESSES } from '@/lib/processes';
 import { ORBITAL_MECHANICS, getUnlockedOM, getTotalEnergyDrain } from '@/lib/orbitalMechanics';
 import { CORE_UPGRADES, canPurchaseUpgrade, getUpgradeCost } from '@/lib/upgrades';
@@ -405,6 +405,14 @@ export default function GamePage() {
     addToast(`Composition: ${id}`, '🪨');
   }, [setState, addToast]);
 
+  const handleCatchComet = useCallback((cometId: number) => {
+    const { state: newState, value } = catchComet(stateRef.current, cometId);
+    if (value > 0) {
+      setState(newState);
+      addToast(`Comet caught! +${fmt(value)} mass`, '☄️');
+    }
+  }, [setState, addToast]);
+
   const setTab = useCallback((tab: TabName) => {
     setState({ ...stateRef.current, activeTab: tab });
   }, [setState]);
@@ -591,7 +599,7 @@ export default function GamePage() {
                         {p.densityPS > 0 && <span className="badge badge-purple">+{fmtPct(p.densityPS)}/s dens</span>}
                       </div>
                     </div>
-                    <button className="btn-primary text-sm ml-3 shrink-0" disabled={!buyInfo.canAfford} onClick={() => handleBuy(p.id)}>
+                    <button className="btn-primary text-sm ml-3 shrink-0 min-w-[5.5rem] text-center" disabled={!buyInfo.canAfford} onClick={() => handleBuy(p.id)}>
                       {buyInfo.label}
                     </button>
                   </div>
@@ -959,6 +967,26 @@ export default function GamePage() {
           <div className="mini-asteroid-mass">+{fmt(getClickValue(state, 1))}/tap</div>
         </div>
       )}
+
+      {/* Active Comets — tappable floating comets */}
+      {state.activeComets && state.activeComets.map(comet => (
+        <button
+          key={comet.id}
+          className="comet-button"
+          style={{
+            left: `${comet.x}%`,
+            top: `${comet.y}%`,
+            opacity: comet.timeLeft < 1.5 ? comet.timeLeft / 1.5 : 1,
+          }}
+          onClick={() => handleCatchComet(comet.id)}
+        >
+          <div className="comet-inner">
+            <span className="comet-emoji">☄️</span>
+            <span className="comet-value">+{fmt(comet.value)}</span>
+          </div>
+          <div className="comet-timer" style={{ width: `${(comet.timeLeft / 5) * 100}%` }} />
+        </button>
+      ))}
 
       {/* Toast notifications */}
       <div className="fixed top-2 right-3 sm:top-4 sm:right-4 z-50 space-y-2 max-w-[90vw]">

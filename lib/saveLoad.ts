@@ -55,6 +55,7 @@ export function loadGame(): GameState | null {
       fastestPrestige: parsed.fastestPrestige ?? defaults.fastestPrestige,
       totalOrbitalToggles: parsed.totalOrbitalToggles ?? defaults.totalOrbitalToggles,
       maxComboReached: parsed.maxComboReached ?? defaults.maxComboReached,
+      activeComets: parsed.activeComets || defaults.activeComets,
     };
     return migrated;
   } catch (e) {
@@ -81,10 +82,24 @@ export function calculateOfflineGains(state: GameState): { state: GameState; off
   const effectiveTicks = Math.min(ticks, 3600); // Max 3600 ticks
   const effectiveTickSize = offlineSeconds / effectiveTicks;
 
+  // Get offline comet capture rate
+  const offlineCometLevel = newState.coreUpgrades['comet_offline'] || 0;
+  const offlineCaptureRate = offlineCometLevel * 0.2; // 20% per level
+
   for (let i = 0; i < effectiveTicks; i++) {
     newState = processTick(newState, effectiveTickSize);
+    // Auto-capture comets that spawned during offline simulation
+    if (newState.activeComets && newState.activeComets.length > 0) {
+      for (const comet of newState.activeComets) {
+        if (offlineCaptureRate > 0 && Math.random() < offlineCaptureRate) {
+          newState = { ...newState, mass: newState.mass + comet.value, cometsCaught: newState.cometsCaught + 1 };
+        }
+      }
+      newState.activeComets = []; // Clear all comets (they were offline)
+    }
   }
 
+  newState.activeComets = []; // Ensure no stale comets after offline
   newState.lastSaveTime = now;
   return { state: newState, offlineTime: offlineSeconds };
 }
@@ -125,6 +140,7 @@ export function importSave(encoded: string): GameState | null {
       fastestPrestige: parsed.fastestPrestige ?? defaults.fastestPrestige,
       totalOrbitalToggles: parsed.totalOrbitalToggles ?? defaults.totalOrbitalToggles,
       maxComboReached: parsed.maxComboReached ?? defaults.maxComboReached,
+      activeComets: parsed.activeComets || defaults.activeComets,
     };
     return migrated;
   } catch {

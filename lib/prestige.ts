@@ -146,6 +146,7 @@ export function getPrestigeResetState(state: GameState): GameState {
 
     // Comet system reset
     nextCometIn: 0,
+    activeComets: [],
 
     // Charged building reset
     chargedProcess: null,
@@ -261,6 +262,7 @@ export function defaultGameState(): GameState {
 
     // Comet system
     nextCometIn: 0,
+    activeComets: [],
 
     // Charged buildings
     chargedProcess: null,

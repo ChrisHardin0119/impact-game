@@ -141,6 +141,7 @@ export interface GameState {
 
   // Comet system (for Ice composition)
   nextCometIn: number; // seconds until next comet event
+  activeComets: ActiveComet[]; // comets on screen waiting to be tapped
 
   // Charged buildings (for Carbonaceous composition)
   chargedProcess: string | null;
@@ -193,4 +194,14 @@ export interface CometEvent {
   id: number;
   value: number;
   timeLeft: number;
+}
+
+export interface ActiveComet {
+  id: number;
+  value: number;
+  x: number; // percentage 0-100 for horizontal position
+  y: number; // percentage 0-100 for vertical position
+  timeLeft: number; // seconds before it expires
+  speed: number; // drift speed
+  angle: number; // drift direction in radians
 }

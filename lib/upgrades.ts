@@ -128,6 +128,30 @@ export const CORE_UPGRADES: CoreUpgradeDef[] = [
     unlockTier: 2,
   },
 
+  // ==================== COMET PATH ====================
+  {
+    id: 'comet_magnet',
+    name: 'Comet Magnet',
+    emoji: '☄️',
+    desc: 'Auto-capture 20% of missed comets per level. At max level (5), all comets are auto-captured.',
+    path: 'foundation',
+    cost: 15,
+    maxLevel: 5,
+    requires: [],
+    unlockTier: 0,
+  },
+  {
+    id: 'comet_offline',
+    name: 'Offline Comets',
+    emoji: '🌙',
+    desc: 'While offline, auto-capture 20% of spawned comets per level. Max 100% at level 5.',
+    path: 'foundation',
+    cost: 25,
+    maxLevel: 5,
+    requires: ['comet_magnet'],
+    unlockTier: 1,
+  },
+
   // ==================== ENERGY PATH ====================
   {
     id: 'energy_capacity',
@@ -236,6 +260,10 @@ export function getUpgradeEffect(id: string, level: number): number {
       return 0.5; // reduce decay by 50%
     case 'density_overclock':
       return 0.25; // 25% of density as mass mult
+    case 'comet_magnet':
+      return level * 0.2; // 20% per level
+    case 'comet_offline':
+      return level * 0.2; // 20% per level
     case 'energy_capacity':
       return level * 50; // +50 per level
     case 'kinetic_resonance':
