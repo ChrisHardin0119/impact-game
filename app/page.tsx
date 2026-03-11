@@ -11,6 +11,22 @@ import { TAB_UNLOCKS, SHARD_UPGRADES, getShardUpgradeCost, isTabUnlocked, getSha
 import { fmt, fmtKg, fmtRate, fmtTime, fmtPercent } from '@/lib/format';
 import { saveGame, loadGame, calculateOfflineGains, hardReset, exportSave, importSave } from '@/lib/saveLoad';
 import { useGameLoop } from '@/hooks/useGameLoop';
+import { resumeAudio, sfxClick, sfxBuy, sfxComet, sfxPrestige, sfxAchievement, sfxAdClaim, sfxExpulsion, sfxTabSwitch, startMusic, stopMusic } from '@/lib/sounds';
+
+// Tutorial definitions
+const TUTORIALS: { id: string; title: string; text: string; trigger: (s: GameState) => boolean }[] = [
+  { id: 'welcome', title: 'Welcome to Impact!', text: 'Tap the floating asteroid to mine mass. Buy metal deposits to earn mass automatically.', trigger: () => true },
+  { id: 'buy_modes', title: 'Buy Modes', text: 'Use x1, x10, x100, or MAX to buy buildings in bulk. MAX shows how many you can afford.', trigger: (s) => s.totalClicks >= 5 },
+  { id: 'comets', title: 'Comets!', text: 'Comets appear every 1-2 minutes. Tap them before they disappear to collect bonus mass!', trigger: (s) => s.cometsCaught >= 1 },
+  { id: 'impact', title: 'Impact (Prestige)', text: 'Once you earn 10,000 Kg in a run, you can Impact to reset but earn Shards — permanent currency for upgrades.', trigger: (s) => s.runMassEarned >= 5000 },
+  { id: 'composition', title: 'Compositions', text: 'After your first Impact, choose an element composition. Each has strategic bonuses and penalties.', trigger: (s) => s.totalPrestigeCount >= 1 },
+  { id: 'expulsion', title: 'Expulsion Tab', text: 'Jettison mass to gain velocity, or sacrifice velocity for mass. Unlock this with shards.', trigger: (s) => !!s.unlockedTabs['expulsion'] },
+  { id: 'velocity', title: 'Velocity Tab', text: 'Spend velocity to produce energy. Reach 50 m/s and Impact to unlock this tab.', trigger: (s) => !!s.unlockedTabs['velocity'] },
+  { id: 'energy', title: 'Energy Tab', text: 'Spend energy on powerful upgrades like auto-purchase and production multipliers.', trigger: (s) => !!s.unlockedTabs['energy'] },
+  { id: 'shards', title: 'Unspent Shard Bonus', text: 'Each unspent shard gives +0.1% to all production. Consider saving some!', trigger: (s) => s.currentShards >= 10 },
+  { id: 'impatient', title: 'Impatient Tab', text: 'Watch ads to skip ahead. Claim 30 min, 1 hr, then 90 min of production. Then a 90 min cooldown.', trigger: (s) => s.totalPrestigeCount >= 1 },
+  { id: 'ads', title: 'Ad Boosts', text: 'Three floating buttons offer boosts: 2x Production, 2x Shards on Impact, and Mass Drops. Popup ads appear periodically too.', trigger: (s) => s.totalClicks >= 20 },
+];
 
 // Space dust floating particles background
 function SpaceDust() {
@@ -79,6 +95,16 @@ export default function GamePage() {
   const [adPopup, setAdPopup] = useState<string | null>(null); // 'production' | 'shard' | 'mass' | 'noads' | null
   const [showNoAdsPurchase, setShowNoAdsPurchase] = useState(false);
 
+  // Feedback state
+  const [showFeedback, setShowFeedback] = useState(false);
+  const [feedbackCategory, setFeedbackCategory] = useState<'bug' | 'suggestion' | 'praise'>('suggestion');
+  const [feedbackText, setFeedbackText] = useState('');
+  const [feedbackRating, setFeedbackRating] = useState(0);
+  const [feedbackSent, setFeedbackSent] = useState(false);
+
+  // Tutorial state
+  const [activeTutorial, setActiveTutorial] = useState<string | null>(null);
+
   // Expulsion tab state
   const [expulsionPercent, setExpulsionPercent] = useState(10);
   const [accumulationAmount, setAccumulationAmount] = useState(1);
@@ -104,6 +130,7 @@ export default function GamePage() {
   // Achievement callback
   const handleNewAchievements = useCallback((popups: AchievementPopup[]) => {
     setAchievementPopups(prev => [...prev, ...popups]);
+    if (popups.length > 0 && stateRef.current.soundEnabled) sfxAchievement();
   }, []);
 
   // Auto-dismiss achievements after 4 seconds
@@ -146,6 +173,31 @@ export default function GamePage() {
     document.documentElement.style.setProperty('-webkit-text-size-adjust', '100%');
   }, []);
 
+  // Music toggle
+  useEffect(() => {
+    if (state.musicEnabled) { resumeAudio(); startMusic(); }
+    else stopMusic();
+    return () => stopMusic();
+  }, [state.musicEnabled]);
+
+  // Resume audio context on first interaction
+  useEffect(() => {
+    const handler = () => { resumeAudio(); window.removeEventListener('click', handler); };
+    window.addEventListener('click', handler);
+    return () => window.removeEventListener('click', handler);
+  }, []);
+
+  // Tutorial checker — show tutorials for newly triggered features
+  useEffect(() => {
+    if (!loaded || activeTutorial) return;
+    for (const tut of TUTORIALS) {
+      if (!state.tutorialCompleted.includes(tut.id) && !state.tutorialSkipped && tut.trigger(state)) {
+        setActiveTutorial(tut.id);
+        break;
+      }
+    }
+  }, [loaded, state, activeTutorial]);
+
   // === COMBO MULTIPLIER (up to 5x) ===
   function getComboMult(combo: number): number {
     const clamped = Math.min(combo, 50);
@@ -169,6 +221,7 @@ export default function GamePage() {
     }
 
     setState(newState);
+    if (stateRef.current.soundEnabled) sfxClick();
 
     // Floating number near the asteroid
     const id = nextFloatId.current++;
@@ -216,7 +269,7 @@ export default function GamePage() {
         })()
       : (s.buyMode as number);
     const result = purchaseBuilding(s, buildingId, count);
-    if (result) setState(result);
+    if (result) { setState(result); if (s.soundEnabled) sfxBuy(); }
   }, [setState]);
 
   const handleBuyEnergyUpgrade = useCallback((upgradeId: string) => {
@@ -242,6 +295,7 @@ export default function GamePage() {
     effectiveRate *= achieveEff.expulsionMult;
     const result = calculateExpulsion(massToJ, effectiveRate);
     setState({ ...s, mass: s.mass - result.massLost, velocity: s.velocity + result.velocityGained, expulsionCooldown: EXPULSION_COOLDOWN, totalExpulsions: s.totalExpulsions + 1 });
+    if (s.soundEnabled) sfxExpulsion();
     setExpulsionMsg(`Jettisoned ${fmtKg(result.massLost)} → +${fmt(result.velocityGained)} m/s`);
     setTimeout(() => setExpulsionMsg(null), 3000);
   }, [expulsionPercent, setState]);
@@ -260,13 +314,14 @@ export default function GamePage() {
 
   const handleCatchComet = useCallback((cometId: number) => {
     const { state: newState, value } = catchComet(stateRef.current, cometId);
-    if (value > 0) setState(newState);
+    if (value > 0) { setState(newState); if (stateRef.current.soundEnabled) sfxComet(); }
   }, [setState]);
 
   const handleTabSwitch = useCallback((tab: TabName) => {
     const s = stateRef.current;
     if (!isTabUnlocked(tab, s.unlockedTabs) && tab !== 'dev') return;
     setState({ ...s, activeTab: tab, tabSwitchCount: s.tabSwitchCount + 1 });
+    if (s.soundEnabled) sfxTabSwitch();
     setTimeout(() => {
       const el = document.getElementById(`tab-${tab}`);
       el?.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' });
@@ -300,6 +355,7 @@ export default function GamePage() {
   const confirmImpact = useCallback(() => {
     setShowImpactWarning(false);
     setImpactExploding(true);
+    if (stateRef.current.soundEnabled) sfxPrestige();
     const s = stateRef.current;
     const shardEff = getShardEffects(s.shardUpgrades);
     const achieveEff = getAchievementEffects(s);
@@ -340,6 +396,7 @@ export default function GamePage() {
       productionAdAvailable: false,
       nextProductionAdIn: 1800,
     });
+    if (s.soundEnabled) sfxAdClaim();
     setAdPopup(null);
   }, [setState]);
 
@@ -447,6 +504,33 @@ export default function GamePage() {
     const result = importSave(importCode);
     if (result) { setState(result); saveGame(result); setImportCode(''); setShowImportExport(false); }
   }, [importCode, setState]);
+
+  const handleDismissTutorial = useCallback(() => {
+    if (!activeTutorial) return;
+    const s = stateRef.current;
+    setState({ ...s, tutorialCompleted: [...s.tutorialCompleted, activeTutorial] });
+    setActiveTutorial(null);
+  }, [activeTutorial, setState]);
+
+  const handleSkipAllTutorials = useCallback(() => {
+    setState({ ...stateRef.current, tutorialSkipped: true });
+    setActiveTutorial(null);
+  }, [setState]);
+
+  const handleDismissBeta = useCallback(() => {
+    setState({ ...stateRef.current, betaDismissed: true });
+  }, [setState]);
+
+  const handleSubmitFeedback = useCallback(() => {
+    if (!feedbackText.trim() || feedbackRating === 0) return;
+    try {
+      const existing = JSON.parse(localStorage.getItem('impact_feedback') || '[]');
+      existing.push({ category: feedbackCategory, text: feedbackText.trim(), rating: feedbackRating, timestamp: Date.now(), tier: state.currentTier, shards: state.lifetimeShards, playTime: state.totalPlayTime });
+      localStorage.setItem('impact_feedback', JSON.stringify(existing));
+      setFeedbackText(''); setFeedbackRating(0); setFeedbackSent(true);
+      setTimeout(() => setFeedbackSent(false), 3000);
+    } catch {}
+  }, [feedbackText, feedbackRating, feedbackCategory, state]);
 
   // === DERIVED VALUES ===
   const prod = getProduction(state);
@@ -557,6 +641,42 @@ export default function GamePage() {
           <div className="impact-text">IMPACT!</div>
         </div>
       )}
+
+      {/* === BETA DISCLAIMER === */}
+      {loaded && !state.betaDismissed && (
+        <div className="fixed inset-0 z-[55] bg-black/85 flex items-center justify-center p-4">
+          <div className="card box-glow-cyan p-6 max-w-sm text-center" style={{ borderColor: 'var(--color-neon)' }}>
+            <div className="text-3xl mb-2">🚀</div>
+            <div className="text-lg font-bold mb-2 glow-cyan">Welcome to Impact Beta!</div>
+            <div className="text-[var(--color-gray-400)] text-xs mb-3" style={{ lineHeight: '1.8' }}>
+              This game is in active development. While we do our best to preserve your progress, major updates may occasionally require a save reset. Thank you for testing!
+            </div>
+            <div className="text-[var(--color-yellow)] text-xs mb-4">⚠️ Progress may be lost during major updates.</div>
+            <button onClick={handleDismissBeta} className="btn-primary w-full">I Understand — Let&apos;s Play!</button>
+          </div>
+        </div>
+      )}
+
+      {/* === TUTORIAL POPUP === */}
+      {activeTutorial && (() => {
+        const tut = TUTORIALS.find(t => t.id === activeTutorial);
+        if (!tut) return null;
+        return (
+          <div className="fixed inset-0 z-[52] bg-black/60 flex items-end justify-center p-4 pb-20">
+            <div className="card box-glow-cyan p-4 max-w-sm w-full" style={{ borderColor: 'var(--color-neon)' }}>
+              <div className="flex items-center gap-2 mb-2">
+                <span className="text-lg">💡</span>
+                <span className="font-bold text-sm glow-cyan">{tut.title}</span>
+              </div>
+              <div className="text-[var(--color-gray-400)] text-xs mb-3" style={{ lineHeight: '1.6' }}>{tut.text}</div>
+              <div className="flex gap-2">
+                <button onClick={handleSkipAllTutorials} className="btn-secondary flex-1 text-xs">Skip All</button>
+                <button onClick={handleDismissTutorial} className="btn-primary flex-1 text-xs">Got it!</button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
 
       {/* === OFFLINE GAINS POPUP === */}
       {offlineGains && (
@@ -749,6 +869,12 @@ export default function GamePage() {
           </div>
         </div>
       )}
+
+      {/* === FLOATING FEEDBACK BUTTON === */}
+      <button className="fixed bottom-4 left-4 z-40 w-10 h-10 rounded-full flex items-center justify-center text-lg shadow-lg"
+        style={{ background: 'var(--color-space-lighter)', border: '1px solid var(--color-gray-700)' }}
+        onClick={() => { setShowFeedback(true); handleTabSwitch('stats'); }}
+        title="Send Feedback">💬</button>
 
       {/* === NO ADS PURCHASE MODAL === */}
       {showNoAdsPurchase && (
@@ -1133,17 +1259,53 @@ export default function GamePage() {
               <div className="stat-row"><span className="text-[var(--color-gray-400)]">Play Time</span><span>{fmtTime(state.totalPlayTime)}</span></div>
               <div className="stat-row"><span className="text-[var(--color-gray-400)]">Run Time</span><span>{fmtTime(state.runTime)}</span></div>
               {state.fastestPrestige < Infinity && <div className="stat-row"><span className="text-[var(--color-gray-400)]">Fastest Impact</span><span>{fmtTime(state.fastestPrestige)}</span></div>}
-              <div className="stat-row"><span className="text-[var(--color-gray-400)]">Best Combo</span><span>x{state.maxComboReached}</span></div>
+              <div className="stat-row"><span className="text-[var(--color-gray-400)]">Best Combo</span><span>x{fmt(state.maxComboReached)}</span></div>
             </div>
             <div className="card mt-4">
               <div className="section-header"><span className="text-sm">⚙️</span><span className="font-bold text-sm">Settings</span></div>
               <div className="flex items-center justify-between mt-2">
-                <span className="text-sm text-[var(--color-gray-400)]">Space Dust Animation</span>
+                <span className="text-sm text-[var(--color-gray-400)]">🎵 Music</span>
+                <button onClick={() => setState({ ...state, musicEnabled: !state.musicEnabled })}
+                  className={`text-xs px-3 py-1 rounded ${state.musicEnabled ? 'btn-primary' : 'btn-secondary'}`}>
+                  {state.musicEnabled ? 'ON' : 'OFF'}
+                </button>
+              </div>
+              <div className="flex items-center justify-between mt-2">
+                <span className="text-sm text-[var(--color-gray-400)]">🔊 Sound Effects</span>
+                <button onClick={() => setState({ ...state, soundEnabled: !state.soundEnabled })}
+                  className={`text-xs px-3 py-1 rounded ${state.soundEnabled ? 'btn-primary' : 'btn-secondary'}`}>
+                  {state.soundEnabled ? 'ON' : 'OFF'}
+                </button>
+              </div>
+              <div className="flex items-center justify-between mt-2">
+                <span className="text-sm text-[var(--color-gray-400)]">✨ Space Dust</span>
                 <button onClick={() => setState({ ...state, spaceDustEnabled: !state.spaceDustEnabled })}
                   className={`text-xs px-3 py-1 rounded ${state.spaceDustEnabled ? 'btn-primary' : 'btn-secondary'}`}>
                   {state.spaceDustEnabled ? 'ON' : 'OFF'}
                 </button>
               </div>
+            </div>
+            <div className="card mt-3">
+              <div className="section-header"><span className="text-sm">💬</span><span className="font-bold text-sm">Feedback</span></div>
+              <div className="flex gap-2 mt-2 mb-2">
+                {([['bug', '🐛 Bug'], ['suggestion', '💡 Idea'], ['praise', '🎉 Praise']] as const).map(([cat, label]) => (
+                  <button key={cat} onClick={() => setFeedbackCategory(cat as any)}
+                    className={`flex-1 text-xs py-1 rounded ${feedbackCategory === cat ? 'btn-primary' : 'btn-secondary'}`}>{label}</button>
+                ))}
+              </div>
+              <textarea value={feedbackText} onChange={e => setFeedbackText(e.target.value)}
+                className="w-full rounded p-2 text-xs h-16 mb-2" style={{ background: 'var(--color-space)', border: '1px solid var(--color-gray-700)', color: '#e0e0ff' }}
+                placeholder="Tell us what you think..." />
+              <div className="flex items-center gap-2 mb-2">
+                <span className="text-xs text-[var(--color-gray-400)]">Rating:</span>
+                {[1,2,3,4,5].map(r => (
+                  <button key={r} onClick={() => setFeedbackRating(r)}
+                    className="text-sm" style={{ color: r <= feedbackRating ? 'var(--color-yellow)' : 'var(--color-gray-600)' }}>★</button>
+                ))}
+              </div>
+              <button onClick={handleSubmitFeedback} className="btn-primary w-full text-xs" disabled={!feedbackText.trim() || feedbackRating === 0}>
+                {feedbackSent ? '✅ Sent! Thanks!' : '📨 Send Feedback'}
+              </button>
             </div>
             <div className="space-y-2 mt-4">
               <button onClick={() => saveGame(stateRef.current)} className="btn-secondary w-full">💾 Save Now</button>

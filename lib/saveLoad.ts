@@ -75,6 +75,9 @@ function migrateState(data: any): GameState {
     impatientStep: data.impatientStep || 0,
     impatientLockoutEndsAt: data.impatientLockoutEndsAt || 0,
     spaceDustEnabled: data.spaceDustEnabled ?? true,
+    soundEnabled: data.soundEnabled ?? true,
+    musicEnabled: data.musicEnabled ?? false,
+    betaDismissed: data.betaDismissed ?? false,
     version: 13.1,
   };
 

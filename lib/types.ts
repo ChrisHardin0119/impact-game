@@ -122,6 +122,9 @@ export interface GameState {
 
   // Settings
   spaceDustEnabled: boolean;
+  soundEnabled: boolean;
+  musicEnabled: boolean;
+  betaDismissed: boolean;
 
   // Dev mode
   devMode: boolean;
