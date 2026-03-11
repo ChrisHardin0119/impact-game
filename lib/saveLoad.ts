@@ -57,6 +57,7 @@ export function loadGame(): GameState | null {
       maxComboReached: parsed.maxComboReached ?? defaults.maxComboReached,
       activeComets: parsed.activeComets || defaults.activeComets,
       forgeLevels: parsed.forgeLevels || defaults.forgeLevels,
+      devMode: parsed.devMode ?? defaults.devMode,
     };
     return migrated;
   } catch (e) {

@@ -357,6 +357,105 @@ body {
   margin: 0.75rem 0;
 }
 
+/* ============================================================ */
+/* Impact Explosion Animation                                    */
+/* ============================================================ */
+.impact-explosion-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+  overflow: hidden;
+}
+
+/* Initial bright flash */
+.impact-flash {
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(circle at center, #fff, #ff6b2b 30%, transparent 70%);
+  animation: impactFlash 2s ease-out forwards;
+}
+
+@keyframes impactFlash {
+  0% { opacity: 0; transform: scale(0.1); }
+  10% { opacity: 1; transform: scale(1.5); }
+  30% { opacity: 0.8; background: radial-gradient(circle at center, #ffdd00, #ff3366 40%, transparent 70%); }
+  100% { opacity: 0; transform: scale(3); }
+}
+
+/* Expanding shockwave rings */
+.impact-ring {
+  position: absolute;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  border: 3px solid #ff6b2b;
+  box-shadow: 0 0 20px #ff6b2b, inset 0 0 20px rgba(255,107,43,0.3);
+}
+
+.impact-ring-1 {
+  animation: impactRingExpand 1.5s ease-out 0.1s forwards;
+}
+.impact-ring-2 {
+  animation: impactRingExpand 1.5s ease-out 0.3s forwards;
+  border-color: #ffdd00;
+  box-shadow: 0 0 20px #ffdd00, inset 0 0 20px rgba(255,221,0,0.3);
+}
+.impact-ring-3 {
+  animation: impactRingExpand 1.5s ease-out 0.5s forwards;
+  border-color: #ff3366;
+  box-shadow: 0 0 20px #ff3366, inset 0 0 20px rgba(255,51,102,0.3);
+}
+
+@keyframes impactRingExpand {
+  0% { width: 20px; height: 20px; opacity: 1; border-width: 4px; }
+  100% { width: 150vw; height: 150vw; opacity: 0; border-width: 1px; }
+}
+
+/* Flying debris particles */
+.impact-debris {
+  position: absolute;
+  width: var(--debris-size, 6px);
+  height: var(--debris-size, 6px);
+  background: #ffdd00;
+  border-radius: 50%;
+  box-shadow: 0 0 6px #ff6b2b;
+  animation: impactDebris 1.8s ease-out var(--debris-delay, 0s) forwards;
+}
+
+@keyframes impactDebris {
+  0% {
+    transform: translate(0, 0) scale(1);
+    opacity: 1;
+  }
+  100% {
+    transform: rotate(var(--debris-angle, 0deg)) translateX(var(--debris-distance, 50vw)) scale(0);
+    opacity: 0;
+  }
+}
+
+/* Impact text */
+.impact-text {
+  position: absolute;
+  font-size: 2.5rem;
+  font-weight: 900;
+  color: #fff;
+  text-shadow: 0 0 30px #ff6b2b, 0 0 60px #ff3366, 0 0 90px #ffdd00;
+  letter-spacing: 0.2em;
+  animation: impactTextPulse 2s ease-out forwards;
+}
+
+@keyframes impactTextPulse {
+  0% { opacity: 0; transform: scale(0.3); }
+  20% { opacity: 1; transform: scale(1.3); }
+  40% { transform: scale(1); }
+  70% { opacity: 1; }
+  100% { opacity: 0; transform: scale(0.8); }
+}
+
 /* Mobile responsive breakpoints */
 @media (max-width: 640px) {
   html { font-size: 16px; }

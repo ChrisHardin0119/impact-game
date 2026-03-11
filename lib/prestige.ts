@@ -159,6 +159,9 @@ export function getPrestigeResetState(state: GameState): GameState {
     tutorialCompleted: [...state.tutorialCompleted],
     tutorialSkipped: state.tutorialSkipped,
 
+    // Developer mode persists
+    devMode: state.devMode,
+
     // Ads & Boosts persist (but prestige double may be consumed)
     adsRemoved: state.adsRemoved,
     boosts: {
@@ -296,6 +299,9 @@ export function defaultGameState(): GameState {
     // UI
     activeTab: 'build',
     buyMode: 1,
+
+    // Developer mode
+    devMode: false,
 
     // Meta
     lastSaveTime: Date.now(),

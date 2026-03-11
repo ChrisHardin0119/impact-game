@@ -40,6 +40,9 @@ export default function GamePage() {
   const [pendingBoost, setPendingBoost] = useState<BoostType | null>(null);
   const [showFeedback, setShowFeedback] = useState(false);
   const [showCompInfo, setShowCompInfo] = useState(false);
+  const [devPasscode, setDevPasscode] = useState('');
+  const [showImpactWarning, setShowImpactWarning] = useState(false);
+  const [impactExploding, setImpactExploding] = useState(false);
 
   // Click combo system
   const [clickCombo, setClickCombo] = useState(0);
@@ -362,7 +365,7 @@ export default function GamePage() {
     addToast(`Upgraded ${def.name}!`, def.emoji);
   }, [setState, addToast]);
 
-  const handlePrestige = useCallback(() => {
+  const doPrestige = useCallback(() => {
     const s = stateRef.current;
     if (!canPrestige(s)) return;
     const prestigeDiscoveries = checkPrestigeDiscoveries(s);
@@ -399,8 +402,21 @@ export default function GamePage() {
     }
     setState(newState);
     const doubleText = shardMult === 2 ? ' (2x bonus!)' : '';
-    addToast(`Prestige! +${fmt(shardsEarned)} shards${doubleText}`, '💎');
+    addToast(`Impact! +${fmt(shardsEarned)} shards${doubleText}`, '💥');
   }, [setState, addToast]);
+
+  const handlePrestige = useCallback(() => {
+    setShowImpactWarning(false);
+    setImpactExploding(true);
+    // Play explosion animation for 1.5s, then do the actual prestige
+    setTimeout(() => {
+      doPrestige();
+      // Keep explosion overlay briefly after reset
+      setTimeout(() => {
+        setImpactExploding(false);
+      }, 500);
+    }, 1500);
+  }, [doPrestige]);
 
   const handleComposition = useCallback((id: string) => {
     setState({ ...stateRef.current, composition: id as any });
@@ -453,9 +469,10 @@ export default function GamePage() {
     { id: 'orbital', label: 'Orbital', icon: '🚀' },
     ...(hasAnyUpgrade ? [{ id: 'forge' as TabName, label: 'Forge', icon: '🔥' }] : []),
     { id: 'upgrades', label: 'Upgrades', icon: '⬆️' },
-    { id: 'prestige', label: 'Prestige', icon: '💎' },
+    { id: 'prestige', label: 'Impact', icon: '💥' },
     { id: 'discover', label: 'Discover', icon: '🔍' },
     { id: 'stats', label: 'Stats', icon: '📊' },
+    ...(state.devMode ? [{ id: 'dev' as TabName, label: 'Dev', icon: '🛠️' }] : []),
   ];
 
   // Calculate display values
@@ -485,7 +502,7 @@ export default function GamePage() {
           <div className="flex gap-2 shrink-0 items-center">
             <button className="btn-secondary text-sm px-2.5 py-1" onClick={() => saveGame(state)}>Save</button>
             <button className="btn-secondary text-sm px-2.5 py-1" onClick={() => setTab('stats')}>⚙</button>
-            <span className="text-xs text-gray-600">v12.5</span>
+            <span className="text-xs text-gray-600">v12.6</span>
           </div>
         </div>
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-x-4 gap-y-2 sm:gap-3">
@@ -826,10 +843,10 @@ export default function GamePage() {
           </div>
         )}
 
-        {/* PRESTIGE TAB */}
+        {/* IMPACT (PRESTIGE) TAB */}
         {activeTab === 'prestige' && (
           <div>
-            <div className="section-header"><h2 className="glow-cyan text-lg font-bold">Prestige</h2></div>
+            <div className="section-header"><h2 className="glow-cyan text-lg font-bold">💥 Impact</h2></div>
             <div className="card mb-4">
               <div className="stat-row">
                 <span className="text-sm text-gray-400">Current Tier</span>
@@ -844,7 +861,7 @@ export default function GamePage() {
                 <span className="badge badge-yellow">{fmt(state.currentShards)}</span>
               </div>
               <div className="stat-row">
-                <span className="text-sm text-gray-400">Total Prestiges</span>
+                <span className="text-sm text-gray-400">Total Impacts</span>
                 <span className="text-neon font-bold">{state.totalPrestigeCount}</span>
               </div>
               {nextTierDef && (
@@ -862,13 +879,13 @@ export default function GamePage() {
                 <span className="glow-cyan font-bold">{fmt(state.runMassEarned)}</span>
               </div>
               <div className="stat-row">
-                <span className="text-sm text-gray-400">Shards on Prestige</span>
+                <span className="text-sm text-gray-400">Shards on Impact</span>
                 <span className="badge badge-yellow text-sm font-bold">{fmt(shardsOnPrestige)}</span>
               </div>
-              <button className="btn-primary mt-3 w-full" disabled={!canPrestige(state)} onClick={handlePrestige}>
-                {canPrestige(state) ? `Prestige for ${fmt(shardsOnPrestige)} Shards` : 'Need more mass to prestige'}
+              <button className="btn-primary mt-3 w-full" disabled={!canPrestige(state)} onClick={() => setShowImpactWarning(true)}>
+                {canPrestige(state) ? `Impact for ${fmt(shardsOnPrestige)} Shards` : 'Need more mass to impact'}
               </button>
-              <div className="text-xs text-gray-400 mt-2 px-1">Prestige resets mass, gravity, density, processes and orbital mechanics. Core upgrades and discoveries persist.</div>
+              <div className="text-xs text-gray-400 mt-2 px-1">Impact resets mass, gravity, density, processes and orbital mechanics. Core upgrades, discoveries, and forge bonuses persist.</div>
             </div>
             {state.composition && (
               <div className="card">
@@ -876,7 +893,7 @@ export default function GamePage() {
                   <span className="text-sm text-gray-400">Composition</span>
                   <span className="badge badge-purple">{COMPOSITIONS.find(c => c.id === state.composition)?.name}</span>
                 </div>
-                <div className="text-xs text-gray-400 mt-1 px-1">You can change composition when you prestige.</div>
+                <div className="text-xs text-gray-400 mt-1 px-1">You can change composition when you impact.</div>
               </div>
             )}
           </div>
@@ -943,7 +960,7 @@ export default function GamePage() {
             <div className="section-header"><h2 className="glow-orange text-lg font-bold">Forge</h2></div>
             <div className="card mb-4">
               <div className="text-sm text-gray-300 px-1">
-                Spend <span className="text-cyan font-bold">gravity</span> and <span className="text-purple font-bold">density</span> to forge permanent bonuses. These persist through prestige. Manage your resources wisely — use Gravity Brake and Density Vent to control levels after forging.
+                Spend <span className="text-cyan font-bold">gravity</span> and <span className="text-purple font-bold">density</span> to forge permanent bonuses. These persist through impact. Manage your resources wisely — use Gravity Brake and Density Vent to control levels after forging.
               </div>
             </div>
 
@@ -1035,7 +1052,7 @@ export default function GamePage() {
               <div className="stat-row"><span className="text-sm text-gray-400">Total Play Time</span><span className="text-neon">{fmtTime(state.totalPlayTime)}</span></div>
               <div className="stat-row"><span className="text-sm text-gray-400">Run Time</span><span className="text-neon">{fmtTime(state.runTime)}</span></div>
               <div className="stat-row"><span className="text-sm text-gray-400">Comets Caught</span><span className="text-neon font-bold">{state.cometsCaught}</span></div>
-              <div className="stat-row"><span className="text-sm text-gray-400">Prestige Count</span><span className="text-neon font-bold">{state.totalPrestigeCount}</span></div>
+              <div className="stat-row"><span className="text-sm text-gray-400">Impact Count</span><span className="text-neon font-bold">{state.totalPrestigeCount}</span></div>
             </div>
             <div className="section-header"><h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider">Settings</h3></div>
             <div className="space-y-2">
@@ -1070,6 +1087,122 @@ export default function GamePage() {
                 }}
               />
             </div>
+            {/* Developer Mode Passcode */}
+            {!state.devMode && (
+              <div className="mt-4">
+                <div className="glow-divider mb-3" />
+                <div className="flex items-center gap-2">
+                  <input
+                    type="password"
+                    placeholder="Dev passcode..."
+                    className="flex-1 bg-space-lighter border border-gray-700 rounded-md px-3 py-1.5 text-sm text-white focus:border-neon focus:outline-none"
+                    value={devPasscode}
+                    onChange={(e) => setDevPasscode(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' && devPasscode === '89116282') {
+                        setState({ ...stateRef.current, devMode: true });
+                        setDevPasscode('');
+                        addToast('Developer mode unlocked!', '🛠️');
+                      }
+                    }}
+                  />
+                  <button className="btn-secondary text-sm px-3 py-1.5" onClick={() => {
+                    if (devPasscode === '89116282') {
+                      setState({ ...stateRef.current, devMode: true });
+                      setDevPasscode('');
+                      addToast('Developer mode unlocked!', '🛠️');
+                    } else {
+                      addToast('Invalid passcode', '❌');
+                      setDevPasscode('');
+                    }
+                  }}>Unlock</button>
+                </div>
+              </div>
+            )}
+            {state.devMode && (
+              <div className="mt-4">
+                <div className="glow-divider mb-3" />
+                <span className="badge badge-yellow">🛠️ Dev Mode Active</span>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* DEV TAB */}
+        {activeTab === 'dev' && state.devMode && (
+          <div>
+            <div className="section-header"><h2 className="text-lg font-bold text-yellow">🛠️ Developer Tools</h2></div>
+
+            {/* Mass Controls */}
+            <div className="card mb-3">
+              <div className="text-sm font-bold text-cyan mb-2">Mass — Current: {fmt(state.mass)}</div>
+              <div className="grid grid-cols-2 gap-2">
+                <button className="btn-secondary text-xs py-2" onClick={() => setState({ ...stateRef.current, mass: stateRef.current.mass + 1000 })}>+1,000</button>
+                <button className="btn-secondary text-xs py-2" onClick={() => setState({ ...stateRef.current, mass: stateRef.current.mass + 1000000 })}>+1M</button>
+                <button className="btn-secondary text-xs py-2" onClick={() => setState({ ...stateRef.current, mass: stateRef.current.mass + 1000000000 })}>+1B</button>
+                <button className="btn-secondary text-xs py-2" onClick={() => { const s = stateRef.current; setState({ ...s, mass: s.mass * 6, runMassEarned: s.runMassEarned + s.mass * 5, totalMassEarned: s.totalMassEarned + s.mass * 5 }); }}>+500% current</button>
+              </div>
+            </div>
+
+            {/* Gravity Controls */}
+            <div className="card mb-3">
+              <div className="text-sm font-bold text-cyan mb-2">Gravity — Current: {fmt(state.gravity, 1)}</div>
+              <div className="grid grid-cols-2 gap-2">
+                <button className="btn-secondary text-xs py-2" onClick={() => setState({ ...stateRef.current, gravity: Math.min(300, stateRef.current.gravity + 25) })}>+25</button>
+                <button className="btn-secondary text-xs py-2" onClick={() => setState({ ...stateRef.current, gravity: Math.min(300, stateRef.current.gravity + 100) })}>+100</button>
+                <button className="btn-secondary text-xs py-2" onClick={() => setState({ ...stateRef.current, gravity: 300 })}>Max (300)</button>
+                <button className="btn-secondary text-xs py-2" onClick={() => setState({ ...stateRef.current, gravity: 0 })}>Reset to 0</button>
+              </div>
+            </div>
+
+            {/* Density Controls */}
+            <div className="card mb-3">
+              <div className="text-sm font-bold text-purple mb-2">Density — Current: {state.density.toFixed(1)}%</div>
+              <div className="grid grid-cols-2 gap-2">
+                <button className="btn-secondary text-xs py-2" onClick={() => setState({ ...stateRef.current, density: Math.min(100, stateRef.current.density + 10) })}>+10%</button>
+                <button className="btn-secondary text-xs py-2" onClick={() => setState({ ...stateRef.current, density: Math.min(100, stateRef.current.density + 25) })}>+25%</button>
+                <button className="btn-secondary text-xs py-2" onClick={() => setState({ ...stateRef.current, density: 100 })}>Max (100%)</button>
+                <button className="btn-secondary text-xs py-2" onClick={() => setState({ ...stateRef.current, density: 0 })}>Reset to 0</button>
+              </div>
+            </div>
+
+            {/* Energy Controls */}
+            <div className="card mb-3">
+              <div className="text-sm font-bold text-orange mb-2">Energy — Current: {Math.floor(state.energy)}/{getMaxEnergy(state)}</div>
+              <div className="grid grid-cols-2 gap-2">
+                <button className="btn-secondary text-xs py-2" onClick={() => setState({ ...stateRef.current, energy: getMaxEnergy(stateRef.current) })}>Fill Energy</button>
+                <button className="btn-secondary text-xs py-2" onClick={() => setState({ ...stateRef.current, energy: 0 })}>Drain Energy</button>
+              </div>
+            </div>
+
+            {/* Shards Controls */}
+            <div className="card mb-3">
+              <div className="text-sm font-bold text-yellow mb-2">Shards — Current: {fmt(state.currentShards)} ({fmt(state.lifetimeShards)} lifetime)</div>
+              <div className="grid grid-cols-2 gap-2">
+                <button className="btn-secondary text-xs py-2" onClick={() => setState({ ...stateRef.current, currentShards: stateRef.current.currentShards + 100, lifetimeShards: stateRef.current.lifetimeShards + 100 })}>+100</button>
+                <button className="btn-secondary text-xs py-2" onClick={() => setState({ ...stateRef.current, currentShards: stateRef.current.currentShards + 1000, lifetimeShards: stateRef.current.lifetimeShards + 1000 })}>+1,000</button>
+                <button className="btn-secondary text-xs py-2" onClick={() => setState({ ...stateRef.current, currentShards: stateRef.current.currentShards + 100000, lifetimeShards: stateRef.current.lifetimeShards + 100000 })}>+100K</button>
+                <button className="btn-secondary text-xs py-2" onClick={() => setState({ ...stateRef.current, currentShards: stateRef.current.currentShards + 1000000, lifetimeShards: stateRef.current.lifetimeShards + 1000000 })}>+1M</button>
+              </div>
+            </div>
+
+            {/* Quick Actions */}
+            <div className="card mb-3">
+              <div className="text-sm font-bold text-green mb-2">Quick Actions</div>
+              <div className="grid grid-cols-2 gap-2">
+                <button className="btn-secondary text-xs py-2" onClick={() => { const s = stateRef.current; setState({ ...s, runMassEarned: s.runMassEarned + 10000000, totalMassEarned: s.totalMassEarned + 10000000 }); }}>+10M Run Mass</button>
+                <button className="btn-secondary text-xs py-2" onClick={() => setState({ ...stateRef.current, cometsCaught: stateRef.current.cometsCaught + 50 })}>+50 Comets</button>
+                <button className="btn-secondary text-xs py-2" onClick={() => setState({ ...stateRef.current, totalClicks: stateRef.current.totalClicks + 1000 })}>+1000 Clicks</button>
+                <button className="btn-secondary text-xs py-2" onClick={() => { const s = stateRef.current; setState({ ...s, mass: s.mass * 6, gravity: Math.min(300, s.gravity + 100), density: Math.min(100, s.density + 30), currentShards: s.currentShards + 10000, lifetimeShards: s.lifetimeShards + 10000, runMassEarned: s.runMassEarned + s.mass * 5, totalMassEarned: s.totalMassEarned + s.mass * 5 }); }}>Boost Everything</button>
+              </div>
+            </div>
+
+            {/* Disable Dev Mode */}
+            <button className="btn-danger w-full text-sm mt-2" onClick={() => {
+              setState({ ...stateRef.current, devMode: false });
+              setTab('stats');
+              addToast('Developer mode disabled', '🔒');
+            }}>Disable Dev Mode</button>
           </div>
         )}
       </div>
@@ -1162,6 +1295,66 @@ export default function GamePage() {
           </div>
         );
       })()}
+
+      {/* Impact Warning Modal */}
+      {showImpactWarning && (
+        <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 px-4" onClick={() => setShowImpactWarning(false)}>
+          <div className="card max-w-sm w-full mx-4" style={{borderColor: '#ff4444', borderWidth: '2px'}} onClick={(e) => e.stopPropagation()}>
+            <div className="text-center mb-3">
+              <div className="text-4xl mb-2">💥</div>
+              <h2 className="text-xl font-bold text-red-400">Initiate Impact?</h2>
+            </div>
+            <div className="text-sm text-gray-300 mb-3 px-1">
+              Your asteroid will collide and reform. This will <span className="text-red-400 font-bold">reset</span> the following:
+            </div>
+            <div className="bg-space-lighter rounded-lg p-3 mb-3 space-y-1.5">
+              <div className="flex items-center gap-2 text-sm"><span className="text-red-400">✕</span> <span className="text-gray-300">Mass, Gravity, Density</span></div>
+              <div className="flex items-center gap-2 text-sm"><span className="text-red-400">✕</span> <span className="text-gray-300">All Processes (buildings)</span></div>
+              <div className="flex items-center gap-2 text-sm"><span className="text-red-400">✕</span> <span className="text-gray-300">Orbital Mechanics</span></div>
+              <div className="flex items-center gap-2 text-sm"><span className="text-red-400">✕</span> <span className="text-gray-300">Energy (resets to base)</span></div>
+              <div className="flex items-center gap-2 text-sm"><span className="text-red-400">✕</span> <span className="text-gray-300">Composition choice</span></div>
+            </div>
+            <div className="text-sm text-gray-300 mb-3 px-1">
+              These will be <span className="text-green font-bold">kept</span>:
+            </div>
+            <div className="bg-space-lighter rounded-lg p-3 mb-4 space-y-1.5">
+              <div className="flex items-center gap-2 text-sm"><span className="text-green">✓</span> <span className="text-gray-300">Core Upgrades (shard purchases)</span></div>
+              <div className="flex items-center gap-2 text-sm"><span className="text-green">✓</span> <span className="text-gray-300">Discoveries & Achievements</span></div>
+              <div className="flex items-center gap-2 text-sm"><span className="text-green">✓</span> <span className="text-gray-300">Forge Bonuses</span></div>
+              <div className="flex items-center gap-2 text-sm"><span className="text-green">✓</span> <span className="text-gray-300">Shards (you gain +{fmt(shardsOnPrestige)} new)</span></div>
+            </div>
+            <div className="flex gap-3">
+              <button className="btn-secondary flex-1" onClick={() => setShowImpactWarning(false)}>Cancel</button>
+              <button className="btn-primary flex-1 bg-red-600 hover:bg-red-500 border-red-500" onClick={handlePrestige}>
+                💥 Impact!
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Impact Explosion Animation Overlay */}
+      {impactExploding && (
+        <div className="impact-explosion-overlay">
+          <div className="impact-flash" />
+          <div className="impact-ring impact-ring-1" />
+          <div className="impact-ring impact-ring-2" />
+          <div className="impact-ring impact-ring-3" />
+          {Array.from({length: 20}).map((_, i) => (
+            <div
+              key={i}
+              className="impact-debris"
+              style={{
+                '--debris-angle': `${(i / 20) * 360}deg`,
+                '--debris-distance': `${40 + Math.random() * 30}vw`,
+                '--debris-size': `${4 + Math.random() * 8}px`,
+                '--debris-delay': `${Math.random() * 0.3}s`,
+              } as React.CSSProperties}
+            />
+          ))}
+          <div className="impact-text">💥 IMPACT 💥</div>
+        </div>
+      )}
 
       {/* Floating Feedback Button */}
       <FeedbackButton onClick={() => setShowFeedback(true)} />

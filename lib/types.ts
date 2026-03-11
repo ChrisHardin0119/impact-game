@@ -5,7 +5,7 @@
 export type CompositionId = 'silicate' | 'iron' | 'ice' | 'carbonaceous' | 'binary' | 'neutron';
 export type ProcessCategory = 'active' | 'passive' | 'resonant' | 'exotic';
 export type PrestigeTier = 0 | 1 | 2 | 3 | 4 | 5;
-export type TabName = 'build' | 'orbital' | 'upgrades' | 'prestige' | 'discover' | 'stats' | 'forge';
+export type TabName = 'build' | 'orbital' | 'upgrades' | 'prestige' | 'discover' | 'stats' | 'forge' | 'dev';
 export type BuyMode = 1 | 5 | 10 | 100 | 'max';
 export type UpgradePath = 'synergy' | 'density' | 'energy';
 
@@ -172,6 +172,9 @@ export interface GameState {
   fastestPrestige: number;     // fastest prestige time in seconds
   totalOrbitalToggles: number; // total times toggles flipped
   maxComboReached: number;     // highest click combo achieved
+
+  // Developer mode
+  devMode: boolean;
 
   // Meta
   lastSaveTime: number;
