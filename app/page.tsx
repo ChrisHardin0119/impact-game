@@ -38,6 +38,7 @@ export default function GamePage() {
   const lastHintCheckRef = useRef(0);
   const [pendingBoost, setPendingBoost] = useState<BoostType | null>(null);
   const [showFeedback, setShowFeedback] = useState(false);
+  const [showCompInfo, setShowCompInfo] = useState(false);
 
   // Click combo system
   const [clickCombo, setClickCombo] = useState(0);
@@ -448,12 +449,12 @@ export default function GamePage() {
         <div className="flex items-center justify-between mb-1.5">
           <div className="flex items-center gap-2 sm:gap-4 min-w-0">
             <span className="glow-cyan font-bold text-base sm:text-xl truncate">{currentTierDef.emoji} {currentTierDef.name}</span>
-            {state.composition && <span className="badge badge-purple">{COMPOSITIONS.find(c => c.id === state.composition)?.name}</span>}
+            {state.composition && <button className="badge badge-purple cursor-pointer hover:brightness-125 active:scale-95 transition-all" onClick={() => setShowCompInfo(true)}>{COMPOSITIONS.find(c => c.id === state.composition)?.name} ⓘ</button>}
           </div>
           <div className="flex gap-2 shrink-0 items-center">
             <button className="btn-secondary text-sm px-2.5 py-1" onClick={() => saveGame(state)}>Save</button>
             <button className="btn-secondary text-sm px-2.5 py-1" onClick={() => setTab('stats')}>⚙</button>
-            <span className="text-xs text-gray-600">v12.3</span>
+            <span className="text-xs text-gray-600">v12.4</span>
           </div>
         </div>
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-x-4 gap-y-2 sm:gap-3">
@@ -977,6 +978,39 @@ export default function GamePage() {
           </div>
         </div>
       )}
+
+      {/* Composition Info Modal */}
+      {showCompInfo && state.composition && (() => {
+        const comp = COMPOSITIONS.find(c => c.id === state.composition)!;
+        return (
+          <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 px-4" onClick={() => setShowCompInfo(false)}>
+            <div className="card max-w-sm w-full mx-4" style={{borderColor: 'var(--color-purple)', borderWidth: '2px'}} onClick={(e) => e.stopPropagation()}>
+              <div className="text-center mb-3">
+                <div className="text-3xl mb-1">{comp.emoji}</div>
+                <h2 className="glow-purple text-lg font-bold">{comp.name}</h2>
+                <div className="text-sm text-gray-400 italic">{comp.flavor}</div>
+              </div>
+              <div className="text-sm text-gray-300 mb-3 px-1">{comp.desc}</div>
+              <div className="glow-divider" />
+              <div className="text-xs text-gray-400 uppercase tracking-wider mb-2 mt-2">Stat Multipliers</div>
+              <div className="grid grid-cols-2 gap-x-4 gap-y-1.5 mb-3">
+                <div className="stat-row"><span className="text-xs text-gray-400">Mass Prod</span><span className={`text-sm font-bold ${comp.massProductionMult >= 1 ? 'text-green' : 'text-red'}`}>{comp.massProductionMult}x</span></div>
+                <div className="stat-row"><span className="text-xs text-gray-400">Cost</span><span className={`text-sm font-bold ${comp.costMult <= 1 ? 'text-green' : 'text-red'}`}>{comp.costMult}x</span></div>
+                <div className="stat-row"><span className="text-xs text-gray-400">Gravity</span><span className={`text-sm font-bold ${comp.gravityMult >= 1 ? 'text-green' : 'text-red'}`}>{comp.gravityMult}x</span></div>
+                <div className="stat-row"><span className="text-xs text-gray-400">Density</span><span className={`text-sm font-bold ${comp.densityMult >= 1 ? 'text-green' : 'text-red'}`}>{comp.densityMult}x</span></div>
+                <div className="stat-row"><span className="text-xs text-gray-400">Synergy</span><span className={`text-sm font-bold ${comp.synergyMult >= 1 ? 'text-green' : 'text-red'}`}>{comp.synergyMult}x</span></div>
+                <div className="stat-row"><span className="text-xs text-gray-400">Click</span><span className={`text-sm font-bold ${comp.clickMult >= 1 ? 'text-green' : 'text-red'}`}>{comp.clickMult}x</span></div>
+              </div>
+              <div className="glow-divider" />
+              <div className="mt-2 px-1">
+                <div className="text-sm font-bold text-purple mb-1">✦ {comp.specialName}</div>
+                <div className="text-sm text-gray-300">{comp.specialDesc}</div>
+              </div>
+              <button className="btn-secondary mt-4 w-full" onClick={() => setShowCompInfo(false)}>Got it</button>
+            </div>
+          </div>
+        );
+      })()}
 
       {/* Floating Feedback Button */}
       <FeedbackButton onClick={() => setShowFeedback(true)} />
